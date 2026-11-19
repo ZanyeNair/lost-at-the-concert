@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lost at the Concert: How Friends (and Servers) Agree</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e0d12;
+    --surface-1: #1a1a19;
+    --surface-2: #232322;
+    --surface-3: #2d2d2b;
+    --border: #3a3a37;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #8d8c84;
+    --follower: #5d6b7a;
+    --candidate: #c98500;
+    --leader: #0ca30c;
+    --dead: #3a3a37;
+    --vote: #d95926;
+    --vote-reply: #f0a072;
+    --append: #3987e5;
+    --append-reply: #8fbcf2;
+    --danger: #e66767;
+    --side-b: #9085e9;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --radius: 10px;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text-primary); font-size: 14px; line-height: 1.45; }
+  header { padding: 18px 24px 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
+  header .titles { flex: 1; min-width: 280px; }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+  header p { margin: 2px 0 0; color: var(--text-secondary); }
+  .mode-toggle { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px; }
+  .mode-toggle button { border: 0; background: transparent; border-radius: 999px; padding: 6px 14px; color: var(--text-secondary); }
+  .mode-toggle button.on { background: var(--append); color: #fff; }
+  .kbd { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: var(--surface-3); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 8px 24px 16px; }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+  .card h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); font-weight: 600; }
+  .stage { display: flex; flex-direction: column; gap: 10px; }
+  #viz { width: 100%; height: auto; display: block; user-select: none; }
+  .statbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+  .stat { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+  .stat .k { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat .v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--text-secondary); font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .bub { width: 13px; height: 9px; border-radius: 3px; display: inline-block; }
+  aside { display: flex; flex-direction: column; gap: 12px; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+  .row label { color: var(--text-secondary); min-width: 110px; }
+  .row output { font-variant-numeric: tabular-nums; min-width: 56px; text-align: right; color: var(--text-primary); }
+  input[type=range] { flex: 1; accent-color: var(--append); min-width: 100px; }
+  button, select, input[type=text], input[type=number] {
+    font: inherit; color: var(--text-primary); background: var(--surface-3); border: 1px solid var(--border);
+    border-radius: 7px; padding: 6px 10px;
+  }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--text-muted); }
+  button.primary { background: var(--append); border-color: var(--append); color: #fff; }
+  button.danger { border-color: var(--danger); color: var(--danger); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  .hint { color: var(--text-muted); font-size: 12px; margin: 4px 0 0; }
+  .sel-info { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--text-secondary); white-space: pre-wrap; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; min-height: 40px; }
+  .lower { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; padding: 0 24px 16px; }
+  @media (max-width: 980px) { .lower { grid-template-columns: 1fr; } }
+  .logrow { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .logrow .name { width: 70px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .logrow .name.dead { color: var(--text-muted); text-decoration: line-through; }
+  .entries { display: flex; gap: 3px; flex-wrap: wrap; flex: 1; min-height: 26px; align-items: center; }
+  .entry { width: 26px; height: 24px; border-radius: 4px; font-size: 11px; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #111; cursor: default; }
+  .entry.uncommitted { background: transparent !important; border: 2px dashed; color: var(--text-secondary); }
+  .kv { font-size: 12px; color: var(--text-secondary); min-width: 150px; text-align: right; }
+  .concert .kv { font-family: inherit; }
+  .raft .kv { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--text-muted); }
+  .plan-card { background: linear-gradient(135deg, #2a1f3d, #1d2a3d); border: 1px solid #4a3d6a; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+  .plan-card .ttl { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #c8bff5; margin-bottom: 6px; }
+  .plan-card .items { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 15px; }
+  .plan-card .who { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+  .raft .plan-card { display: none; }
+  #events { font-family: ui-monospace, Menlo, monospace; font-size: 12px; max-height: 300px; overflow: auto; margin: 0; padding: 0; list-style: none; }
+  .concert #events { font-family: inherit; font-size: 13px; }
+  #events li { padding: 3px 0; border-bottom: 1px solid var(--surface-2); color: var(--text-secondary); }
+  #events li .t { color: var(--text-muted); display: inline-block; width: 64px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  #events li.leader { color: #7ed67e; }
+  #events li.elect { color: #f0c060; }
+  #events li.crash, #events li.warn { color: var(--danger); }
+  #events li.commit { color: var(--append-reply); }
+  #events li.part { color: var(--side-b); }
+  .exp { padding: 0 24px 32px; }
+  .exp-grid { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 980px) { .exp-grid { grid-template-columns: 1fr; } }
+  .progress { height: 6px; background: var(--surface-3); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+  .progress div { height: 100%; width: 0; background: var(--append); transition: width 0.1s; }
+  #chartWrap { position: relative; }
+  #chart { width: 100%; height: auto; display: block; }
+  .tooltip { position: absolute; pointer-events: none; background: var(--surface-3); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 12px; display: none; white-space: nowrap; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 12px; margin-top: 10px; }
+  th, td { padding: 4px 8px; text-align: right; border-bottom: 1px solid var(--surface-3); }
+  th { color: var(--text-muted); font-weight: 600; }
+  th:first-child, td:first-child { text-align: left; }
+  details summary { cursor: pointer; color: var(--text-secondary); }
+  .partition-on #viz { outline: 2px dashed var(--side-b); outline-offset: 4px; border-radius: 8px; }
+  .raft-only, .concert-only { }
+  .concert .raft-only { display: none !important; }
+  .raft .concert-only { display: none !important; }
+</style>
+</head>
+<body class="concert">
+<header>
+  <div class="titles">
+    <h1 data-t="title"></h1>
+    <p data-t="subtitle"></p>
+    <p class="hint" data-t="keys"></p>
+  </div>
+  <div class="mode-toggle" role="group" aria-label="Terminology">
+    <button id="modeConcert" class="on">🎤 Concert story</button>
+    <button id="modeRaft">⚙️ Real Raft terms</button>
+  </div>
+</header>
+
+<main>
+  <section class="card stage">
+    <svg id="viz" viewBox="0 0 760 540" role="img" aria-label="Cluster visualization"></svg>
+    <div class="legend" id="legend"></div>
+    <div class="statbar" id="statbar"></div>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h2 data-t="hCluster"></h2>
+      <div class="row">
+        <label for="nodeCount" data-t="nodes"></label>
+        <select id="nodeCount"><option>3</option><option selected>5</option><option>7</option></select>
+        <button id="resetBtn" data-t="reset"></button>
+      </div>
+      <div class="row">
+        <button id="pauseBtn" class="primary">Pause</button>
+        <button id="stepBtn" data-t="step"></button>
+      </div>
+      <div class="row"><label for="speed" data-t="speed"></label><input type="range" id="speed" min="0.1" max="4" step="0.1" value="1"><output id="speedOut">1.0×</output></div>
+    </div>
+
+    <div class="card">
+      <h2 data-t="hNetwork"></h2>
+      <div class="row"><label for="loss" data-t="loss"></label><input type="range" id="loss" min="0" max="0.7" step="0.01" value="0"><output id="lossOut">0%</output></div>
+      <div class="row"><label for="latency" data-t="latency"></label><input type="range" id="latency" min="20" max="1200" step="10" value="300"><output id="latencyOut">300 ms</output></div>
+      <div class="row"><label for="jitter" data-t="jitter"></label><input type="range" id="jitter" min="0" max="600" step="10" value="120"><output id="jitterOut">±120 ms</output></div>
+      <details>
+        <summary data-t="timing"></summary>
+        <div class="row"><label for="etMin" data-t="etMin"></label><input type="range" id="etMin" min="300" max="5000" step="50" value="1500"><output id="etMinOut">1500 ms</output></div>
+        <div class="row"><label for="etMax" data-t="etMax"></label><input type="range" id="etMax" min="400" max="8000" step="50" value="3000"><output id="etMaxOut">3000 ms</output></div>
+        <div class="row"><label for="hb" data-t="hb"></label><input type="range" id="hb" min="100" max="2000" step="50" value="500"><output id="hbOut">500 ms</output></div>
+        <p class="hint" data-t="timingHint"></p>
+      </details>
+    </div>
+
+    <div class="card">
+      <h2 data-t="hFailures"></h2>
+      <div class="btns">
+        <button id="crashLeaderBtn" class="danger" data-t="crashLeader"></button>
+        <button id="partLeaderBtn" data-t="partLeader"></button>
+        <button id="isolateBtn" data-t="isolate"></button>
+        <button id="healBtn" data-t="heal"></button>
+      </div>
+      <div class="row"><label><input type="checkbox" id="partEdit"> <span data-t="partEdit"></span></label></div>
+      <p class="hint" data-t="partHint"></p>
+    </div>
+
+    <div class="card">
+      <h2 data-t="hClient"></h2>
+      <div class="row concert-only">
+        <select id="preset" style="flex:1;min-width:0"></select>
+        <button id="sendBtnC" data-t="send"></button>
+      </div>
+      <div class="row raft-only">
+        <input type="text" id="cmd" value="SET x=1" style="flex:1;min-width:0">
+        <button id="sendBtn" data-t="send"></button>
+      </div>
+      <div class="row"><label><input type="checkbox" id="autoTraffic"> <span data-t="auto"></span></label></div>
+      <p class="hint" data-t="clientHint"></p>
+    </div>
+
+    <div class="card">
+      <h2 data-t="hSelected"></h2>
+      <div class="sel-info" id="selInfo"></div>
+      <div class="btns" style="margin-top:8px"><button id="toggleNodeBtn" disabled>—</button></div>
+    </div>
+  </aside>
+</main>
+
+<section class="lower">
+  <div class="card">
+    <h2 data-t="hLogs"></h2>
+    <div class="plan-card" id="planCard"></div>
+    <p class="hint" style="margin-top:-4px" data-t="logsHint"></p>
+    <div id="logs"></div>
+  </div>
+  <div class="card">
+    <h2 data-t="hEvents"></h2>
+    <ul id="events"></ul>
+  </div>
+</section>
+
+<section class="exp">
+  <div class="card">
+    <h2 data-t="hExp"></h2>
+    <div class="exp-grid">
+      <div>
+        <p class="hint" style="margin-top:0" data-t="expDesc"></p>
+        <div class="row"><label for="trials" data-t="trials"></label><input type="number" id="trials" min="5" max="200" value="30" style="width:80px"></div>
+        <div class="row"><label for="lossLevels" data-t="lossLevels"></label><input type="text" id="lossLevels" value="0,10,20,30,40,50,60" style="flex:1;min-width:0"></div>
+        <div class="btns"><button id="runExp" class="primary" data-t="run"></button><button id="copyCsv" disabled>Copy CSV</button></div>
+        <div class="progress"><div id="prog"></div></div>
+        <p class="hint" id="expStatus"></p>
+      </div>
+      <div>
+        <div id="chartWrap">
+          <svg id="chart" viewBox="0 0 640 320" role="img" aria-label="Failover time versus packet loss"></svg>
+          <div class="tooltip" id="tip"></div>
+        </div>
+        <div id="resultTable"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+"use strict";
+// ======================================================================
+//  Seeded RNG (so experiment runs are reproducible)
+// ======================================================================
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ======================================================================
+//  Raft engine: pure simulation, no drawing, no wording.
+//  Time is in simulated milliseconds. Events are structured so the UI
+//  can describe them as Raft OR as the concert story.
+// ======================================================================
+class Cluster {
+  constructor(n, cfg, seed, opts = {}) {
+    this.n = n;
+    this.cfg = { ...cfg };
+    this.rand = mulberry32(seed);
+    this.time = 0;
+    this.messages = [];
+    this.poofs = [];          // dropped-message markers for the animation
+    this.msgId = 0;
+    this.events = [];
+    this.quiet = !!opts.quiet;
+    this.group = new Array(n).fill(0);   // which side of a partition each node is on
+    this.stats = { sent: 0, dropped: 0, elections: 0, leaderlessTime: 0 };
+    this.nodes = [];
+    for (let i = 0; i < n; i++) this.nodes.push(this.freshNode(i));
+  }
+
+  freshNode(id) {
+    const nd = {
+      id, alive: true, state: "follower",
+      // persistent state (survives crashes)
+      term: 0, votedFor: null, log: [],
+      // volatile state
+      commitIndex: 0, lastApplied: 0, kv: {}, votes: new Set(), leaderId: null,
+      nextIndex: [], matchIndex: [],
+      electionDeadline: 0, timerSet: 0, heartbeatDue: 0,
+    };
+    this.resetTimer(nd);
+    return nd;
+  }
+
+  // ---------- helpers ----------
+  randTimeout() { const c = this.cfg; return c.electionMin + this.rand() * Math.max(0, c.electionMax - c.electionMin); }
+  resetTimer(nd) { nd.timerSet = this.time; nd.electionDeadline = this.time + this.randTimeout(); }
+  emit(type, data = {}) {
+    if (this.quiet) return;
+    this.events.push({ t: this.time, type, ...data });
+    if (this.events.length > 400) this.events.shift();
+  }
+  lastIndex(nd) { return nd.log.length; }
+  lastTerm(nd) { return nd.log.length ? nd.log[nd.log.length - 1].term : 0; }
+  termAt(nd, i) { return i === 0 ? 0 : (nd.log[i - 1] ? nd.log[i - 1].term : -1); }
+  majority() { return Math.floor(this.n / 2) + 1; }
+  connected(a, b) { return this.group[a] === this.group[b]; }
+
+  // ---------- network ----------
+  send(from, to, type, payload) {
+    const c = this.cfg;
+    this.stats.sent++;
+    const latency = Math.max(5, c.latency + (this.rand() * 2 - 1) * c.jitter);
+    let drop = false;
+    if (!this.connected(from, to)) drop = true;
+    else if (this.rand() < c.loss) drop = true;
+    this.messages.push({
+      id: ++this.msgId, from, to, type, payload,
+      sendTime: this.time, arriveTime: this.time + latency,
+      drop, dropAt: 0.35 + this.rand() * 0.3,
+    });
+  }
+
+  // ---------- main tick ----------
+  step(dt) {
+    this.time += dt;
+
+    // 1) deliver or drop in-flight messages
+    const inflight = this.messages;
+    this.messages = [];
+    for (const m of inflight) {
+      if (m.drop) {
+        const dropTime = m.sendTime + (m.arriveTime - m.sendTime) * m.dropAt;
+        if (this.time < dropTime) { this.messages.push(m); continue; }
+        this.stats.dropped++;
+        if (!this.quiet) this.poofs.push({ from: m.from, to: m.to, frac: m.dropAt, t: this.time });
+        continue;
+      }
+      if (this.time < m.arriveTime) { this.messages.push(m); continue; }
+      const to = this.nodes[m.to];
+      if (!to.alive || !this.connected(m.from, m.to)) {
+        this.stats.dropped++;
+        if (!this.quiet) this.poofs.push({ from: m.from, to: m.to, frac: 0.95, t: this.time });
+        continue;
+      }
+      this.handle(to, m);
+    }
+    if (!this.quiet) this.poofs = this.poofs.filter(p => this.time - p.t < 600);
+
+    // 2) timers
+    for (const nd of this.nodes) {
+      if (!nd.alive) continue;
+      if (nd.state === "leader") {
+        if (this.time >= nd.heartbeatDue) {
+          this.broadcastAppend(nd);
+          nd.heartbeatDue = this.time + this.cfg.heartbeat;
+        }
+      } else if (this.time >= nd.electionDeadline) {
+        this.startElection(nd);
+      }
+    }
+
+    if (!this.hasEffectiveLeader()) this.stats.leaderlessTime += dt;
+  }
+
+  // ---------- Raft rules ----------
+  stepDown(nd, term) {
+    if (term > nd.term) { nd.term = term; nd.votedFor = null; }
+    if (nd.state !== "follower") {
+      const was = nd.state;
+      nd.state = "follower";
+      if (was === "leader") this.resetTimer(nd);
+      this.emit("stepdown", { id: nd.id, from: was, term: nd.term });
+    }
+  }
+
+  startElection(nd) {
+    nd.state = "candidate";
+    nd.term++;
+    nd.votedFor = nd.id;
+    nd.votes = new Set([nd.id]);
+    nd.leaderId = null;
+    this.resetTimer(nd);
+    this.stats.elections++;
+    this.emit("timeout", { id: nd.id, term: nd.term });
+    for (const p of this.nodes) {
+      if (p.id === nd.id) continue;
+      this.send(nd.id, p.id, "RequestVote", {
+        term: nd.term, lastLogIndex: this.lastIndex(nd), lastLogTerm: this.lastTerm(nd),
+      });
+    }
+    if (nd.votes.size >= this.majority()) this.becomeLeader(nd);
+  }
+
+  becomeLeader(nd) {
+    nd.state = "leader";
+    nd.leaderId = nd.id;
+    for (let i = 0; i < this.n; i++) { nd.nextIndex[i] = this.lastIndex(nd) + 1; nd.matchIndex[i] = 0; }
+    // A new leader appends a no-op so entries from earlier terms can be committed (Raft §8).
+    nd.log.push({ term: nd.term, cmd: "no-op" });
+    nd.matchIndex[nd.id] = this.lastIndex(nd);
+    this.emit("won", { id: nd.id, votes: nd.votes.size, n: this.n, term: nd.term });
+    this.broadcastAppend(nd);
+    nd.heartbeatDue = this.time + this.cfg.heartbeat;
+  }
+
+  broadcastAppend(nd) {
+    for (const p of this.nodes) if (p.id !== nd.id) this.sendAppend(nd, p.id);
+  }
+
+  sendAppend(nd, peer) {
+    const prev = nd.nextIndex[peer] - 1;
+    const entries = nd.log.slice(prev, prev + 8).map(e => ({ ...e }));
+    this.send(nd.id, peer, "AppendEntries", {
+      term: nd.term, prevLogIndex: prev, prevLogTerm: this.termAt(nd, prev),
+      entries, leaderCommit: nd.commitIndex,
+    });
+  }
+
+  handle(nd, m) {
+    const p = m.payload;
+    if (p.term > nd.term) this.stepDown(nd, p.term);
+
+    switch (m.type) {
+      case "RequestVote": {
+        let granted = false;
+        if (p.term >= nd.term && (nd.votedFor === null || nd.votedFor === m.from)) {
+          const myT = this.lastTerm(nd), myI = this.lastIndex(nd);
+          const upToDate = p.lastLogTerm > myT || (p.lastLogTerm === myT && p.lastLogIndex >= myI);
+          if (upToDate) { granted = true; nd.votedFor = m.from; this.resetTimer(nd); }
+        }
+        this.send(nd.id, m.from, "VoteReply", { term: nd.term, granted });
+        break;
+      }
+      case "VoteReply": {
+        if (nd.state === "candidate" && p.term === nd.term && p.granted) {
+          nd.votes.add(m.from);
+          if (nd.votes.size >= this.majority()) this.becomeLeader(nd);
+        }
+        break;
+      }
+      case "AppendEntries": {
+        if (p.term < nd.term) {
+          this.send(nd.id, m.from, "AppendReply", { term: nd.term, success: false });
+          break;
+        }
+        if (nd.state !== "follower") this.stepDown(nd, p.term);
+        nd.leaderId = m.from;
+        this.resetTimer(nd);
+
+        // Consistency check: do we have the entry the leader thinks comes right before these?
+        if (p.prevLogIndex > this.lastIndex(nd) || this.termAt(nd, p.prevLogIndex) !== p.prevLogTerm) {
+          const hint = p.prevLogIndex > this.lastIndex(nd) ? this.lastIndex(nd) + 1 : p.prevLogIndex;
+          this.send(nd.id, m.from, "AppendReply", { term: nd.term, success: false, hint });
+          break;
+        }
+        let idx = p.prevLogIndex;
+        for (const e of p.entries) {
+          idx++;
+          if (nd.log.length >= idx) {
+            if (nd.log[idx - 1].term !== e.term) {
+              const removed = nd.log.length - (idx - 1);
+              nd.log.length = idx - 1;
+              nd.log.push(e);
+              this.emit("truncate", { id: nd.id, removed });
+            }
+          } else {
+            nd.log.push(e);
+          }
+        }
+        const lastNew = p.prevLogIndex + p.entries.length;
+        if (p.leaderCommit > nd.commitIndex) nd.commitIndex = Math.min(p.leaderCommit, lastNew);
+        this.apply(nd);
+        this.send(nd.id, m.from, "AppendReply", { term: nd.term, success: true, matchIndex: lastNew });
+        break;
+      }
+      case "AppendReply": {
+        if (nd.state !== "leader" || p.term !== nd.term) break;
+        if (p.success) {
+          if (p.matchIndex > nd.matchIndex[m.from]) nd.matchIndex[m.from] = p.matchIndex;
+          nd.nextIndex[m.from] = nd.matchIndex[m.from] + 1;
+          this.advanceCommit(nd);
+          if (nd.nextIndex[m.from] <= this.lastIndex(nd)) this.sendAppend(nd, m.from);
+        } else {
+          nd.nextIndex[m.from] = Math.max(1, p.hint || nd.nextIndex[m.from] - 1);
+          this.sendAppend(nd, m.from);
+        }
+        break;
+      }
+    }
+  }
+
+  advanceCommit(nd) {
+    for (let N = this.lastIndex(nd); N > nd.commitIndex; N--) {
+      if (nd.log[N - 1].term !== nd.term) break;  // leaders only commit entries from their own term
+      let count = 0;
+      for (let i = 0; i < this.n; i++) if (i === nd.id || nd.matchIndex[i] >= N) count++;
+      if (count >= this.majority()) {
+        nd.commitIndex = N;
+        this.emit("commit", { id: nd.id, index: N, count, n: this.n, cmd: nd.log[N - 1].cmd });
+        this.apply(nd);
+        break;
+      }
+    }
+  }
+
+  apply(nd) {
+    while (nd.lastApplied < nd.commitIndex) {
+      nd.lastApplied++;
+      const e = nd.log[nd.lastApplied - 1];
+      const mm = /^SET\s+(\w+)\s*=\s*(.+)$/i.exec(e.cmd);
+      if (mm) nd.kv[mm[1]] = mm[2].trim();
+    }
+  }
+
+  // ---------- outside actions ----------
+  clientRequest(cmd, preferId = null) {
+    let l = null;
+    if (preferId !== null) {
+      const nd = this.nodes[preferId];
+      if (nd.alive && nd.state === "leader") l = nd;
+    }
+    if (!l) l = this.bestLeader();
+    if (!l) { this.emit("reject", { cmd }); return false; }
+    l.log.push({ term: l.term, cmd });
+    l.matchIndex[l.id] = this.lastIndex(l);
+    this.emit("client", { id: l.id, cmd, index: this.lastIndex(l) });
+    this.broadcastAppend(l);
+    return true;
+  }
+
+  bestLeader() {
+    let b = null;
+    for (const nd of this.nodes) if (nd.alive && nd.state === "leader" && (!b || nd.term > b.term)) b = nd;
+    return b;
+  }
+
+  // A leader that can actually make progress: it reaches a majority and nobody it reaches has a newer term.
+  hasEffectiveLeader() {
+    for (const nd of this.nodes) {
+      if (!nd.alive || nd.state !== "leader") continue;
+      let reach = 0, newer = false;
+      for (const o of this.nodes) {
+        if (o.alive && this.connected(nd.id, o.id)) { reach++; if (o.term > nd.term) newer = true; }
+      }
+      if (reach >= this.majority() && !newer) return true;
+    }
+    return false;
+  }
+
+  kill(id) {
+    const nd = this.nodes[id];
+    if (!nd.alive) return;
+    nd.alive = false;
+    this.emit("crash", { id, wasLeader: nd.state === "leader" });
+  }
+
+  restart(id) {
+    const nd = this.nodes[id];
+    if (nd.alive) return;
+    nd.alive = true; nd.state = "follower";
+    nd.commitIndex = 0; nd.lastApplied = 0; nd.kv = {}; nd.votes = new Set(); nd.leaderId = null;
+    this.resetTimer(nd);
+    this.emit("restart", { id, term: nd.term, len: nd.log.length });
+  }
+}
+
+// ======================================================================
+//  Words: the same engine, described two ways
+// ======================================================================
+const FRIENDS = ["Maya", "Jake", "Priya", "Leo", "Sam", "Ava", "Noah"];
+const KEYS = { spot: { icon: "📍", label: "Meet at" }, time: { icon: "🕙", label: "When" }, after: { icon: "🚪", label: "Leave by" }, ride: { icon: "🚗", label: "Ride" } };
+const PRESETS = [
+  "SET spot=Merch tent", "SET time=10:30", "SET after=Gate C", "SET spot=Left speaker tower",
+  "SET ride=Uber at Lot B", "SET time=After the encore", "SET spot=Food trucks", "SET after=Gate A",
+];
+function prettyCmd(cmd) {
+  if (cmd === "no-op") return "new captain says hi";
+  const mm = /^SET\s+(\w+)\s*=\s*(.+)$/i.exec(cmd);
+  if (!mm) return cmd;
+  const k = KEYS[mm[1]];
+  return k ? `${k.icon} ${k.label}: ${mm[2]}` : `${mm[1]} = ${mm[2]}`;
+}
+function cmdIcon(cmd) {
+  if (cmd === "no-op") return "·";
+  const mm = /^SET\s+(\w+)/i.exec(cmd);
+  return mm && KEYS[mm[1]] ? KEYS[mm[1]].icon : "✎";
+}
+
+const T = {
+  concert: {
+    title: "Lost at the Concert 🎤",
+    subtitle: "Five friends, one packed crowd, bad signal. How do they agree on where to meet? (Spoiler: the same way servers do.)",
+    keys: 'Keys: <span class="kbd">Space</span> pause · <span class="kbd">L</span> captain\'s phone dies · <span class="kbd">P</span> crowd surge · <span class="kbd">H</span> crowd clears · <span class="kbd">C</span> text a plan update',
+    hCluster: "The friend group", nodes: "Friends", reset: "New show", step: "Step +100 ms", speed: "Sim speed",
+    hNetwork: "Signal in the crowd", loss: "Texts that fail", latency: "Text delay", jitter: "Delay randomness",
+    timing: "Patience settings", etMin: "Patience (min)", etMax: "Patience (max)", hb: "Captain check-in",
+    timingHint: "If friends lose patience faster than the captain checks in, they keep trying to take over. Try it.",
+    hFailures: "Concert chaos", crashLeader: "🔋 Captain's phone dies", partLeader: "🌊 Crowd surge cuts off the captain", isolate: "🚻 Someone's in the bathroom line", heal: "✨ Crowd clears",
+    partEdit: "Click friends to move them across the crowd", partHint: "Purple-glow friends are cut off from the rest. Texts between the two sides don't go through.",
+    hClient: "Plan updates", send: "Text group", auto: "Plans keep changing (every 2.5 s)",
+    clientHint: "Updates go to the captain, who passes them on. They only count once most of the group has them.",
+    hSelected: "Friend's phone", selEmpty: "Click a friend to see their phone.",
+    hLogs: "Everyone's texts", logsHint: "Each box is a plan update. Solid = locked in (most of the group has it). Dashed = not confirmed yet. Box color = which captain sent it.",
+    hEvents: "Group chat", hExp: "Experiment: how bad can the signal get before the group can't regroup?",
+    expDesc: "For each signal level: the group picks a captain, the captain's phone dies, and we time how long until someone new is calling the shots. Repeats many times with the current settings.",
+    trials: "Shows per level", lossLevels: "Failed texts (%)", run: "Run experiment",
+    xAxis: "Texts that fail", yAxis: "Time until a new captain", leaderWord: "captain", noLeader: "NO CAPTAIN",
+    thLoss: "Failed texts", thRec: "Regrouped", thMed: "Median wait", thMean: "Mean", thP90: "90th pct", thTerms: "Takeover tries",
+    stats: ["Show time", "Captain", "Round", "Takeover tries", "Texts sent", "Failed", "No captain"],
+    legend: [
+      ["dot", "--follower", "Following"], ["dot", "--candidate", "Trying to take over"], ["dot", "--leader", "Captain 📍"], ["dot", "--dead", "Phone died"],
+      ["bub", "--vote", '"Can I call the spot?"'], ["bub", "--vote-reply", "👍 / 👎 reply"], ["bub", "--append", "Captain update / check-in"], ["bub", "--append-reply", '"Got it"'],
+      ["x", "", "Text failed"], ["ring", "", "Ring = patience left"],
+    ],
+    name: id => FRIENDS[id],
+    status: nd => !nd.alive ? "🔋 dead" : nd.state === "leader" ? "📍 captain" : nd.state === "candidate" ? "📣 asking…" : "following",
+    ev: {
+      start: e => `${e.n} friends at the show. A plan is locked in once ${e.maj} of them have it.`,
+      timeout: e => `${FRIENDS[e.id]} hasn't heard from a captain → "Can I call the spot?" (round ${e.term})`,
+      won: e => `${FRIENDS[e.id]} gets ${e.votes}/${e.n} 👍 → new captain 📍 (round ${e.term})`,
+      stepdown: e => `${FRIENDS[e.id]} sees there's a newer captain → stops ${e.from === "leader" ? "captaining" : "asking"} and follows`,
+      truncate: e => `${FRIENDS[e.id]} realizes ${e.removed} of their plan update${e.removed === 1 ? " was" : "s were"} never agreed on → deletes ${e.removed === 1 ? "it" : "them"}`,
+      commit: e => `Locked in ✓ ${prettyCmd(e.cmd)} (${e.count}/${e.n} friends have it)`,
+      client: e => `${FRIENDS[e.id]} texts the group: ${prettyCmd(e.cmd)}`,
+      reject: e => `Nobody's captain right now, so "${prettyCmd(e.cmd)}" goes nowhere`,
+      crash: e => `🔋 ${FRIENDS[e.id]}'s phone died${e.wasLeader ? " (they were the captain!)" : ""}`,
+      restart: e => `🔌 ${FRIENDS[e.id]} found a charger and is catching up on texts`,
+      partition: e => `🌊 Crowd surge! ${e.ids.map(i => FRIENDS[i]).join(" & ")} ${e.ids.length === 1 ? "is" : "are"} cut off from the rest`,
+      isolate: e => `🚻 ${FRIENDS[e.id]} is stuck in the bathroom line with no signal`,
+      heal: () => `✨ Crowd clears. Everyone has signal again`,
+      move: e => `${FRIENDS[e.id]} moved to the ${e.side ? "far" : "near"} side of the crowd`,
+      noLeaderAct: () => `Nobody's captain right now`,
+    },
+  },
+  raft: {
+    title: "Raft Under Pressure",
+    subtitle: "Leader election and log replication on an unreliable network. Click a node to inspect it.",
+    keys: 'Keys: <span class="kbd">Space</span> pause · <span class="kbd">L</span> crash leader · <span class="kbd">P</span> partition leader · <span class="kbd">H</span> heal · <span class="kbd">C</span> client write',
+    hCluster: "Cluster", nodes: "Nodes", reset: "Reset cluster", step: "Step +100 ms", speed: "Sim speed",
+    hNetwork: "Network", loss: "Packet loss", latency: "Latency", jitter: "Jitter",
+    timing: "Raft timing", etMin: "Election min", etMax: "Election max", hb: "Heartbeat",
+    timingHint: "Raft needs heartbeat ≪ election timeout. Make them close and watch leadership flap.",
+    hFailures: "Failures", crashLeader: "Crash leader", partLeader: "Partition leader into minority", isolate: "Isolate a follower", heal: "Heal network",
+    partEdit: "Click nodes to switch sides", partHint: "Purple nodes are on side B. Messages between sides are lost.",
+    hClient: "Client", send: "Write", auto: "Auto-write every 2.5 s",
+    clientHint: "Writes go to the selected node if it's a leader, otherwise the highest-term leader.",
+    hSelected: "Selected node", selEmpty: "Click a node.",
+    hLogs: "Replicated logs", logsHint: "Each box is a log entry, labeled and colored by term. Solid = committed, dashed = not committed yet. Right side = applied key-value state.",
+    hEvents: "Event log", hExp: "Experiment: how does packet loss affect failover?",
+    expDesc: "For each loss rate: start a cluster, wait for a leader, crash it, and time how long until a new leader is in charge. Runs headless with the current settings.",
+    trials: "Trials per point", lossLevels: "Loss levels (%)", run: "Run experiment",
+    xAxis: "Packet loss", yAxis: "Time to new leader", leaderWord: "leader", noLeader: "NO LEADER",
+    thLoss: "Packet loss", thRec: "Recovered", thMed: "Median failover", thMean: "Mean", thP90: "90th pct", thTerms: "Elections needed",
+    stats: ["Sim time", "Leader", "Highest term", "Elections", "Msgs sent", "Dropped", "Leaderless"],
+    legend: [
+      ["dot", "--follower", "Follower"], ["dot", "--candidate", "Candidate"], ["dot", "--leader", "Leader"], ["dot", "--dead", "Crashed"],
+      ["dot", "--vote", "RequestVote"], ["dot", "--vote-reply", "Vote reply"], ["dot", "--append", "AppendEntries / heartbeat"], ["dot", "--append-reply", "Append reply"],
+      ["x", "", "Dropped packet"], ["ring", "", "Ring = election timer"],
+    ],
+    name: id => "S" + (id + 1),
+    status: nd => nd.alive ? "term " + nd.term : "crashed",
+    ev: {
+      start: e => `Cluster of ${e.n} started. Majority = ${e.maj}.`,
+      timeout: e => `S${e.id + 1} timed out → candidate, term ${e.term}`,
+      won: e => `S${e.id + 1} won with ${e.votes}/${e.n} votes → LEADER, term ${e.term}`,
+      stepdown: e => `S${e.id + 1} steps down: ${e.from} → follower (term ${e.term})`,
+      truncate: e => `S${e.id + 1} found a conflicting log → discarded ${e.removed} uncommitted entr${e.removed === 1 ? "y" : "ies"}`,
+      commit: e => `S${e.id + 1} committed through index ${e.index} (${e.count}/${e.n} have it)`,
+      client: e => `Client → S${e.id + 1}: ${e.cmd} (index ${e.index})`,
+      reject: e => `Client write "${e.cmd}" rejected: no leader`,
+      crash: e => `S${e.id + 1} CRASHED${e.wasLeader ? " (was leader)" : ""}`,
+      restart: e => `S${e.id + 1} restarted (kept term ${e.term} and ${e.len} log entries)`,
+      partition: e => `Network PARTITION: {${e.ids.map(i => "S" + (i + 1)).join(", ")}} cut off from the majority`,
+      isolate: e => `Network PARTITION: S${e.id + 1} isolated (watch its term climb, then heal)`,
+      heal: () => `Network HEALED: all nodes can talk again`,
+      move: e => `S${e.id + 1} moved to side ${e.side ? "B" : "A"}`,
+      noLeaderAct: () => `No leader right now`,
+    },
+  },
+};
+const EV_KIND = { start: "info", timeout: "elect", won: "leader", stepdown: "down", truncate: "warn", commit: "commit", client: "client", reject: "warn", crash: "crash", restart: "restart", partition: "part", isolate: "part", heal: "part", move: "part", noLeaderAct: "warn" };
+
+let mode = "concert";
+const L = () => T[mode];
+
+// ======================================================================
+//  UI state
+// ======================================================================
+const $ = id => document.getElementById(id);
+const cfg = { electionMin: 1500, electionMax: 3000, heartbeat: 500, latency: 300, jitter: 120, loss: 0 };
+let cluster;
+let paused = false, speed = 1, selected = null, partEdit = false;
+let autoTraffic = false, nextAuto = 0, writeCounter = 1, presetIdx = 0;
+
+const svg = $("viz");
+const W = 760, H = 540, CX = W / 2, CY = 300, R = 175, NR = 38;
+function pos(i) {
+  const a = -Math.PI / 2 + (i * 2 * Math.PI) / cluster.n;
+  return [CX + R * Math.cos(a), CY + R * Math.sin(a)];
+}
+const termColor = t => `hsl(${(t * 67 + 200) % 360} 65% 62%)`;
+const msgColor = { RequestVote: "var(--vote)", VoteReply: "var(--vote-reply)", AppendEntries: "var(--append)", AppendReply: "var(--append-reply)" };
+
+// static crowd + stage backdrop for concert mode
+const crowd = (() => {
+  const r = mulberry32(7), pts = [];
+  for (let i = 0; i < 260; i++) pts.push([r() * W, 70 + r() * (H - 75), 1 + r() * 2.2, 0.08 + r() * 0.16]);
+  return pts;
+})();
+function backdrop() {
+  if (mode !== "concert") return "";
+  let s = `<defs>
+    <linearGradient id="stageG" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3b2a63"/><stop offset="1" stop-color="#1d1530"/></linearGradient>
+    <radialGradient id="beam" cx="0.5" cy="0" r="1"><stop offset="0" stop-color="#b9a8ff" stop-opacity="0.22"/><stop offset="1" stop-color="#b9a8ff" stop-opacity="0"/></radialGradient>
+  </defs>`;
+  s += `<polygon points="250,40 510,40 700,${H} 60,${H}" fill="url(#beam)"/>`;
+  for (const [x, y, r, o] of crowd) s += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="#c3c2b7" opacity="${o.toFixed(2)}"/>`;
+  s += `<rect x="190" y="6" width="380" height="40" rx="8" fill="url(#stageG)" stroke="#5a4890"/>`;
+  s += `<text x="${CX}" y="32" text-anchor="middle" font-size="14" font-weight="700" letter-spacing="6" fill="#d9d0ff">STAGE</text>`;
+  return s;
+}
+
+function arcPath(x, y, r, frac) {
+  frac = Math.max(0, Math.min(0.9999, frac));
+  const a0 = -Math.PI / 2, a1 = a0 + frac * 2 * Math.PI;
+  const x0 = x + r * Math.cos(a0), y0 = y + r * Math.sin(a0);
+  const x1 = x + r * Math.cos(a1), y1 = y + r * Math.sin(a1);
+  return `M${x0.toFixed(1)},${y0.toFixed(1)} A${r},${r} 0 ${frac > 0.5 ? 1 : 0} 1 ${x1.toFixed(1)},${y1.toFixed(1)}`;
+}
+
+// ---------- drawing the cluster ----------
+function renderViz() {
+  const c = cluster, t = L();
+  let s = backdrop();
+  // links
+  for (let i = 0; i < c.n; i++) for (let j = i + 1; j < c.n; j++) {
+    const [x1, y1] = pos(i), [x2, y2] = pos(j);
+    const cut = !c.connected(i, j);
+    s += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${cut ? "var(--danger)" : "var(--surface-3)"}" stroke-width="${cut ? 1.5 : 1}" ${cut ? 'stroke-dasharray="4 6" opacity="0.55"' : ""}/>`;
+  }
+  // messages in flight
+  for (const m of c.messages) {
+    let f = (c.time - m.sendTime) / (m.arriveTime - m.sendTime);
+    f = Math.max(0, Math.min(1, f));
+    const [x1, y1] = pos(m.from), [x2, y2] = pos(m.to);
+    const x = x1 + (x2 - x1) * f, y = y1 + (y2 - y1) * f;
+    const big = m.type === "AppendEntries" && m.payload.entries.length > 0;
+    let r = m.type === "AppendEntries" ? (big ? 8 : 5) : 6;
+    if (m.type === "VoteReply" && !m.payload.granted) r = 4;
+    if (mode === "concert") {
+      const w = r * 2.4, h = r * 1.7;
+      s += `<rect x="${(x - w / 2).toFixed(1)}" y="${(y - h / 2).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${msgColor[m.type]}" stroke="var(--surface-1)" stroke-width="1.5"/>`;
+    } else {
+      s += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="${msgColor[m.type]}" stroke="var(--surface-1)" stroke-width="2"/>`;
+    }
+  }
+  // dropped messages
+  for (const p of c.poofs) {
+    const [x1, y1] = pos(p.from), [x2, y2] = pos(p.to);
+    const x = x1 + (x2 - x1) * p.frac, y = y1 + (y2 - y1) * p.frac;
+    const o = 1 - (c.time - p.t) / 600;
+    s += `<g opacity="${o.toFixed(2)}" stroke="var(--danger)" stroke-width="2.5" stroke-linecap="round"><line x1="${x - 6}" y1="${y - 6}" x2="${x + 6}" y2="${y + 6}"/><line x1="${x - 6}" y1="${y + 6}" x2="${x + 6}" y2="${y - 6}"/></g>`;
+  }
+  // nodes
+  for (const nd of c.nodes) {
+    const [x, y] = pos(nd.id);
+    const fill = !nd.alive ? "var(--dead)" : nd.state === "leader" ? "var(--leader)" : nd.state === "candidate" ? "var(--candidate)" : "var(--follower)";
+    const sideB = c.group[nd.id] === 1;
+    s += `<g data-node="${nd.id}" style="cursor:pointer">`;
+    if (sideB) s += `<circle cx="${x}" cy="${y}" r="${NR + 16}" fill="var(--side-b)" opacity="0.22"/>`;
+    if (selected === nd.id) s += `<circle cx="${x}" cy="${y}" r="${NR + 12}" fill="none" stroke="var(--text-primary)" stroke-width="1.5" stroke-dasharray="3 4"/>`;
+    if (nd.alive && nd.state !== "leader") {
+      const total = nd.electionDeadline - nd.timerSet;
+      const left = Math.max(0, nd.electionDeadline - c.time);
+      s += `<circle cx="${x}" cy="${y}" r="${NR + 6}" fill="none" stroke="var(--surface-3)" stroke-width="4"/>`;
+      s += `<path d="${arcPath(x, y, NR + 6, total > 0 ? left / total : 0)}" fill="none" stroke="${nd.state === "candidate" ? "var(--candidate)" : "var(--text-muted)"}" stroke-width="4" stroke-linecap="round"/>`;
+    }
+    s += `<circle cx="${x}" cy="${y}" r="${NR}" fill="${fill}" stroke="${sideB ? "var(--side-b)" : "var(--surface-1)"}" stroke-width="${sideB ? 3 : 2}" ${nd.alive ? "" : 'stroke-dasharray="5 4"'}/>`;
+    const star = mode === "raft" && nd.state === "leader" && nd.alive ? "★ " : "";
+    s += `<text x="${x}" y="${y - 3}" text-anchor="middle" font-size="${mode === "concert" ? 15 : 17}" font-weight="700" fill="${nd.alive ? "#fff" : "var(--text-muted)"}">${star}${t.name(nd.id)}</text>`;
+    s += `<text x="${x}" y="${y + 15}" text-anchor="middle" font-size="11.5" fill="${nd.alive ? "rgba(255,255,255,0.88)" : "var(--text-muted)"}">${t.status(nd)}</text>`;
+    s += `</g>`;
+  }
+  // center label
+  const l = c.bestLeader(), ok = c.hasEffectiveLeader();
+  s += `<rect x="${CX - 70}" y="${CY - 26}" width="140" height="54" rx="10" fill="var(--bg)" opacity="0.75"/>`;
+  s += `<text x="${CX}" y="${CY - 6}" text-anchor="middle" font-size="12" fill="var(--text-muted)">${ok ? t.leaderWord : ""}</text>`;
+  s += `<text x="${CX}" y="${CY + 16}" text-anchor="middle" font-size="19" font-weight="700" fill="${ok ? "var(--leader)" : "var(--danger)"}">${ok && l ? t.name(l.id) : t.noLeader}</text>`;
+  svg.innerHTML = s;
+}
+
+function stat(k, v) { return `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`; }
+function kvText(kv) {
+  const e = Object.entries(kv);
+  if (!e.length) return mode === "concert" ? "<span class='hint'>no plan yet</span>" : "{}";
+  return mode === "concert" ? e.map(([k, v]) => `${KEYS[k] ? KEYS[k].icon : k} ${v}`).join(" · ") : e.map(([k, v]) => `${k}=${v}`).join(" ");
+}
+
+function renderPanels() {
+  const c = cluster, l = c.bestLeader(), t = L();
+  const maxTerm = Math.max(...c.nodes.map(n => n.term));
+  const unavail = c.time > 0 ? (100 * c.stats.leaderlessTime / c.time) : 0;
+  const S = t.stats;
+  $("statbar").innerHTML =
+    stat(S[0], (c.time / 1000).toFixed(1) + " s") +
+    stat(S[1], c.hasEffectiveLeader() && l ? t.name(l.id) : "none") +
+    stat(S[2], maxTerm) +
+    stat(S[3], c.stats.elections) +
+    stat(S[4], c.stats.sent) +
+    stat(S[5], c.stats.dropped + (c.stats.sent ? ` <span style="font-size:12px;color:var(--text-muted)">(${(100 * c.stats.dropped / c.stats.sent).toFixed(0)}%)</span>` : "")) +
+    stat(S[6], unavail.toFixed(1) + "%");
+
+  // plan card (concert): the locked-in plan, and who actually has it
+  if (mode === "concert") {
+    const ref = l || c.nodes.filter(n => n.alive).sort((a, b) => b.commitIndex - a.commitIndex)[0];
+    const plan = ref ? ref.kv : {};
+    const items = Object.keys(KEYS).filter(k => plan[k]).map(k => `<span>${KEYS[k].icon} <b>${plan[k]}</b></span>`).join("");
+    const same = c.nodes.filter(n => n.alive && JSON.stringify(n.kv) === JSON.stringify(plan)).map(n => FRIENDS[n.id]);
+    $("planCard").innerHTML = `<div class="ttl">🎟️ The locked-in plan</div><div class="items">${items || "<span class='hint'>Nothing locked in yet. Send a plan update.</span>"}</div>` +
+      `<div class="who">${items ? `Up to date: ${same.join(", ") || "nobody"}` : ""}</div>`;
+  }
+
+  // logs
+  let h = "";
+  for (const nd of c.nodes) {
+    const lead = nd.state === "leader" && nd.alive;
+    h += `<div class="logrow"><div class="name ${nd.alive ? "" : "dead"}">${t.name(nd.id)}${lead ? (mode === "concert" ? " 📍" : " ★") : ""}</div><div class="entries">`;
+    nd.log.forEach((e, i) => {
+      const committed = i < nd.commitIndex;
+      const col = termColor(e.term);
+      const label = mode === "concert" ? cmdIcon(e.cmd) : (e.cmd === "no-op" ? "·" : e.term);
+      const tip = mode === "concert"
+        ? `${prettyCmd(e.cmd)} · from round-${e.term} captain · ${committed ? "locked in" : "NOT confirmed"}`
+        : `#${i + 1} · term ${e.term} · ${e.cmd}${committed ? " · committed" : " · NOT committed"}`;
+      h += `<div class="entry ${committed ? "" : "uncommitted"}" style="background:${col};border-color:${col}" title="${tip}">${label}</div>`;
+    });
+    if (!nd.log.length) h += `<span class="hint">${mode === "concert" ? "no texts" : "empty"}</span>`;
+    h += `</div><div class="kv">${kvText(nd.kv)}</div></div>`;
+  }
+  $("logs").innerHTML = h;
+
+  // events
+  const ev = c.events.slice(-80).reverse();
+  $("events").innerHTML = ev.map(e => `<li class="${EV_KIND[e.type] || "info"}"><span class="t">${(e.t / 1000).toFixed(2)}s</span>${t.ev[e.type] ? t.ev[e.type](e) : e.type}</li>`).join("");
+
+  // selected node
+  const btn = $("toggleNodeBtn");
+  if (selected !== null) {
+    const nd = c.nodes[selected];
+    const left = Math.max(0, nd.electionDeadline - c.time) / 1000;
+    if (mode === "concert") {
+      const role = !nd.alive ? "PHONE DEAD" : nd.state === "leader" ? "CAPTAIN 📍" : nd.state === "candidate" ? "TRYING TO TAKE OVER" : "FOLLOWING";
+      $("selInfo").textContent =
+        `${FRIENDS[nd.id]}: ${role}   (${c.group[nd.id] ? "far" : "near"} side)\n` +
+        `round ${nd.term}   backed ${nd.votedFor === null ? "nobody yet" : FRIENDS[nd.votedFor]}\n` +
+        `${nd.log.length} texts, ${nd.commitIndex} locked in\n` +
+        (nd.state === "leader" ? `checking in with everyone` : `captain: ${nd.leaderId === null ? "unknown" : FRIENDS[nd.leaderId]}   patience left ${left.toFixed(1)} s`);
+      btn.textContent = nd.alive ? `🔋 Kill ${FRIENDS[nd.id]}'s phone` : `🔌 Charge ${FRIENDS[nd.id]}'s phone`;
+    } else {
+      $("selInfo").textContent =
+        `S${nd.id + 1}  ${nd.alive ? nd.state.toUpperCase() : "CRASHED"}   side ${c.group[nd.id] ? "B" : "A"}\n` +
+        `term ${nd.term}   votedFor ${nd.votedFor === null ? "—" : "S" + (nd.votedFor + 1)}\n` +
+        `log length ${nd.log.length}   commitIndex ${nd.commitIndex}\n` +
+        (nd.state === "leader" ? `matchIndex [${nd.matchIndex.join(", ")}]` : `leader ${nd.leaderId === null ? "unknown" : "S" + (nd.leaderId + 1)}   timeout in ${left.toFixed(2)} s`);
+      btn.textContent = nd.alive ? `Crash S${nd.id + 1}` : `Restart S${nd.id + 1}`;
+    }
+    btn.disabled = false;
+    btn.className = nd.alive ? "danger" : "primary";
+  } else {
+    $("selInfo").textContent = t.selEmpty;
+    btn.disabled = true; btn.textContent = "—"; btn.className = "";
+  }
+}
+
+// ======================================================================
+//  Theme switching
+// ======================================================================
+function applyMode(m) {
+  mode = m;
+  document.body.className = m + (partEdit ? " partition-on" : "");
+  $("modeConcert").classList.toggle("on", m === "concert");
+  $("modeRaft").classList.toggle("on", m === "raft");
+  const t = L();
+  document.querySelectorAll("[data-t]").forEach(el => { if (t[el.dataset.t] !== undefined) el.innerHTML = t[el.dataset.t]; });
+  $("legend").innerHTML = t.legend.map(([kind, color, label]) => {
+    if (kind === "x") return `<span style="color:var(--danger)">✕ ${label}</span>`;
+    if (kind === "ring") return `<span>${label}</span>`;
+    const shape = m === "concert" && kind === "bub" ? "bub" : "dot";
+    return `<span><i class="${shape}" style="background:var(${color})"></i>${label}</span>`;
+  }).join("");
+  document.title = m === "concert" ? "Lost at the Concert: How Friends (and Servers) Agree" : "Raft Under Pressure: Consensus on Unreliable Networks";
+  $("pauseBtn").textContent = paused ? "Play" : "Pause";
+  renderPanels();
+  if (expResults.length) { drawChart(); drawTable(); }
+}
+$("modeConcert").onclick = () => applyMode("concert");
+$("modeRaft").onclick = () => applyMode("raft");
+
+// ======================================================================
+//  Main loop
+// ======================================================================
+let last = performance.now(), panelTimer = 0;
+function frame(now) {
+  const realDt = Math.min(100, now - last);
+  last = now;
+  if (!paused) advance(realDt * speed);
+  renderViz();
+  panelTimer += realDt;
+  if (panelTimer > 100) { panelTimer = 0; renderPanels(); }
+  requestAnimationFrame(frame);
+}
+function nextCommand() {
+  if (mode === "concert") { const cmd = PRESETS[presetIdx % PRESETS.length]; presetIdx++; return cmd; }
+  const keys = ["x", "y", "z"]; const cmd = `SET ${keys[writeCounter % 3]}=${writeCounter}`; writeCounter++; return cmd;
+}
+function advance(simMs) {
+  while (simMs > 0) {
+    const d = Math.min(5, simMs);
+    cluster.step(d);
+    simMs -= d;
+    if (autoTraffic && cluster.time >= nextAuto) {
+      nextAuto = cluster.time + 2500;
+      cluster.clientRequest(nextCommand());
+    }
+  }
+}
+
+// ======================================================================
+//  Controls
+// ======================================================================
+function bindRange(id, fmt, apply) {
+  const el = $(id), out = $(id + "Out");
+  const upd = () => { const v = parseFloat(el.value); out.textContent = fmt(v); apply(v); };
+  el.addEventListener("input", upd);
+  upd();
+}
+function syncCfg() { if (cluster) Object.assign(cluster.cfg, cfg); }
+bindRange("speed", v => v.toFixed(1) + "×", v => { speed = v; });
+bindRange("loss", v => Math.round(v * 100) + "%", v => { cfg.loss = v; syncCfg(); });
+bindRange("latency", v => v + " ms", v => { cfg.latency = v; syncCfg(); });
+bindRange("jitter", v => "±" + v + " ms", v => { cfg.jitter = v; syncCfg(); });
+bindRange("etMin", v => v + " ms", v => {
+  cfg.electionMin = v;
+  if (cfg.electionMax < v) { $("etMax").value = v; $("etMaxOut").textContent = v + " ms"; cfg.electionMax = v; }
+  syncCfg();
+});
+bindRange("etMax", v => v + " ms", v => {
+  cfg.electionMax = v;
+  if (cfg.electionMin > v) { $("etMin").value = v; $("etMinOut").textContent = v + " ms"; cfg.electionMin = v; }
+  syncCfg();
+});
+bindRange("hb", v => v + " ms", v => { cfg.heartbeat = v; syncCfg(); });
+
+$("preset").innerHTML = PRESETS.map((p, i) => `<option value="${i}">${prettyCmd(p)}</option>`).join("");
+
+function resetCluster() {
+  cluster = new Cluster(parseInt($("nodeCount").value, 10), cfg, (Date.now() ^ (Math.random() * 1e9)) >>> 0);
+  selected = null; nextAuto = 0; writeCounter = 1; presetIdx = 0;
+  cluster.emit("start", { n: cluster.n, maj: cluster.majority() });
+}
+$("resetBtn").onclick = resetCluster;
+$("nodeCount").onchange = resetCluster;
+
+function togglePause() { paused = !paused; $("pauseBtn").textContent = paused ? "Play" : "Pause"; }
+$("pauseBtn").onclick = togglePause;
+$("stepBtn").onclick = () => { advance(100); renderPanels(); };
+
+function crashLeader() {
+  const l = cluster.bestLeader();
+  if (l) cluster.kill(l.id); else cluster.emit("noLeaderAct");
+}
+$("crashLeaderBtn").onclick = crashLeader;
+
+function partitionLeader() {
+  const c = cluster, l = c.bestLeader();
+  if (!l) { c.emit("noLeaderAct"); return; }
+  const minority = c.n - c.majority();          // e.g. 2 of 5
+  c.group.fill(0);
+  c.group[l.id] = 1;
+  let moved = 1;
+  for (let k = 1; k < c.n && moved < minority; k++) { c.group[(l.id + k) % c.n] = 1; moved++; }
+  c.emit("partition", { ids: c.nodes.filter(n => c.group[n.id]).map(n => n.id) });
+}
+$("partLeaderBtn").onclick = partitionLeader;
+
+$("isolateBtn").onclick = () => {
+  const c = cluster;
+  const cands = c.nodes.filter(n => n.alive && n.state !== "leader");
+  const pick = selected !== null && c.nodes[selected].state !== "leader" ? c.nodes[selected] : cands[Math.floor(Math.random() * cands.length)];
+  if (!pick) return;
+  c.group.fill(0); c.group[pick.id] = 1;
+  c.emit("isolate", { id: pick.id });
+};
+
+function heal() {
+  if (cluster.group.some(g => g)) cluster.emit("heal");
+  cluster.group.fill(0);
+}
+$("healBtn").onclick = heal;
+$("partEdit").onchange = e => { partEdit = e.target.checked; document.body.classList.toggle("partition-on", partEdit); };
+
+function clientWrite() {
+  if (mode === "concert") {
+    const i = parseInt($("preset").value, 10);
+    cluster.clientRequest(PRESETS[i], selected);
+    $("preset").value = String((i + 1) % PRESETS.length);
+    return;
+  }
+  const cmd = $("cmd").value.trim() || `SET x=${writeCounter}`;
+  cluster.clientRequest(cmd, selected);
+  writeCounter++;
+  const mm = /^SET\s+(\w+)\s*=\s*(\d+)$/i.exec(cmd);
+  if (mm) $("cmd").value = `SET ${mm[1]}=${parseInt(mm[2], 10) + 1}`;
+}
+$("sendBtn").onclick = clientWrite;
+$("sendBtnC").onclick = clientWrite;
+$("cmd").addEventListener("keydown", e => { if (e.key === "Enter") clientWrite(); });
+$("autoTraffic").onchange = e => { autoTraffic = e.target.checked; nextAuto = cluster.time; };
+
+$("toggleNodeBtn").onclick = () => {
+  if (selected === null) return;
+  const nd = cluster.nodes[selected];
+  nd.alive ? cluster.kill(nd.id) : cluster.restart(nd.id);
+};
+
+svg.addEventListener("click", e => {
+  const g = e.target.closest("[data-node]");
+  if (!g) { selected = null; return; }
+  const id = parseInt(g.dataset.node, 10);
+  if (partEdit) {
+    cluster.group[id] = cluster.group[id] ? 0 : 1;
+    cluster.emit("move", { id, side: cluster.group[id] });
+  }
+  selected = id;
+});
+
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" && e.target.type !== "checkbox") return;
+  if (e.target.tagName === "SELECT") return;
+  const k = e.key.toLowerCase();
+  if (k === " ") { e.preventDefault(); togglePause(); }
+  else if (k === "l") crashLeader();
+  else if (k === "p") partitionLeader();
+  else if (k === "h") heal();
+  else if (k === "c") clientWrite();
+});
+
+// ======================================================================
+//  Experiment: failover time vs message loss (headless)
+// ======================================================================
+const LIMIT = 60000, DT = 5;
+function runTrial(n, tcfg, seed) {
+  const c = new Cluster(n, tcfg, seed, { quiet: true });
+  while (c.time < LIMIT && !c.hasEffectiveLeader()) c.step(DT);
+  if (!c.hasEffectiveLeader()) return { firstLeader: null, failover: null, extraTerms: null };
+  const firstLeader = c.time;
+  const settle = c.time + 1000;
+  while (c.time < settle) c.step(DT);
+  const l = c.bestLeader();
+  if (!l) return { firstLeader, failover: null, extraTerms: null };
+  const termBefore = Math.max(...c.nodes.map(x => x.term));
+  c.kill(l.id);
+  const crash = c.time;
+  while (c.time < crash + LIMIT && !c.hasEffectiveLeader()) c.step(DT);
+  if (!c.hasEffectiveLeader()) return { firstLeader, failover: null, extraTerms: null };
+  const nl = c.bestLeader();
+  return { firstLeader, failover: c.time - crash, extraTerms: nl.term - termBefore };
+}
+function quantile(sorted, q) {
+  if (!sorted.length) return NaN;
+  const p = (sorted.length - 1) * q, lo = Math.floor(p), hi = Math.ceil(p);
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (p - lo);
+}
+
+let expResults = [], expRunning = false, expMeta = "";
+$("runExp").onclick = () => {
+  if (expRunning) return;
+  const levels = $("lossLevels").value.split(",").map(s => parseFloat(s)).filter(v => !isNaN(v) && v >= 0 && v < 100).map(v => v / 100);
+  const trials = Math.max(1, Math.min(500, parseInt($("trials").value, 10) || 30));
+  const n = parseInt($("nodeCount").value, 10);
+  if (!levels.length) return;
+  expRunning = true; $("runExp").disabled = true; $("copyCsv").disabled = true;
+  const raw = levels.map(() => []);
+  const total = levels.length * trials;
+  let done = 0, li = 0, ti = 0;
+  const baseSeed = 12345;
+  const tick = () => {
+    const t0 = performance.now();
+    while (performance.now() - t0 < 30 && li < levels.length) {
+      const tcfg = { ...cfg, loss: levels[li] };
+      raw[li].push(runTrial(n, tcfg, baseSeed + li * 10007 + ti * 31));
+      done++; ti++;
+      if (ti >= trials) { ti = 0; li++; }
+    }
+    $("prog").style.width = (100 * done / total).toFixed(1) + "%";
+    $("expStatus").textContent = `Running… ${done}/${total} trials`;
+    if (li < levels.length) { setTimeout(tick, 0); return; }
+    expResults = levels.map((loss, i) => {
+      const ok = raw[i].filter(r => r.failover !== null);
+      const f = ok.map(r => r.failover).sort((a, b) => a - b);
+      const terms = ok.map(r => r.extraTerms);
+      return {
+        loss, trials: raw[i].length, succeeded: ok.length,
+        mean: f.length ? f.reduce((a, b) => a + b, 0) / f.length : NaN,
+        median: quantile(f, 0.5), p90: quantile(f, 0.9),
+        meanTerms: terms.length ? terms.reduce((a, b) => a + b, 0) / terms.length : NaN,
+      };
+    });
+    expRunning = false; $("runExp").disabled = false; $("copyCsv").disabled = false;
+    expMeta = `Done: ${total} trials, ${n} nodes, latency ${cfg.latency}±${cfg.jitter} ms, election timeout ${cfg.electionMin}–${cfg.electionMax} ms, heartbeat ${cfg.heartbeat} ms.`;
+    $("expStatus").textContent = expMeta;
+    drawChart(); drawTable();
+  };
+  tick();
+};
+
+const fmtS = ms => isNaN(ms) ? "—" : (ms / 1000).toFixed(2) + " s";
+function drawTable() {
+  const t = L();
+  const rows = expResults.map(r => `<tr><td>${Math.round(r.loss * 100)}%</td><td>${r.succeeded}/${r.trials}</td><td>${fmtS(r.median)}</td><td>${fmtS(r.mean)}</td><td>${fmtS(r.p90)}</td><td>${isNaN(r.meanTerms) ? "—" : r.meanTerms.toFixed(2)}</td></tr>`).join("");
+  $("resultTable").innerHTML = `<table><thead><tr><th>${t.thLoss}</th><th>${t.thRec}</th><th>${t.thMed}</th><th>${t.thMean}</th><th>${t.thP90}</th><th>${t.thTerms}</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function csv() {
+  const head = "packet_loss_pct,trials,recovered,median_failover_ms,mean_failover_ms,p90_failover_ms,mean_elections_needed";
+  const f = v => isNaN(v) ? "" : v.toFixed(0);
+  return [head, ...expResults.map(r => [Math.round(r.loss * 100), r.trials, r.succeeded, f(r.median), f(r.mean), f(r.p90), isNaN(r.meanTerms) ? "" : r.meanTerms.toFixed(3)].join(","))].join("\n");
+}
+$("copyCsv").onclick = async () => {
+  try { await navigator.clipboard.writeText(csv()); $("expStatus").textContent = "CSV copied. Paste it into Excel or Google Sheets."; }
+  catch { $("resultTable").insertAdjacentHTML("beforeend", `<pre style="white-space:pre-wrap;font-size:11px">${csv()}</pre>`); }
+};
+
+function drawChart() {
+  const t = L();
+  const ch = $("chart"), CW = 640, CH = 320, m = { l: 56, r: 120, t: 20, b: 44 };
+  const pts = expResults.filter(r => !isNaN(r.mean));
+  if (!pts.length) { ch.innerHTML = ""; return; }
+  const xMax = Math.max(...expResults.map(r => r.loss)) || 0.01;
+  const yMax = Math.max(...pts.map(r => r.p90)) * 1.1 || 1000;
+  const sx = v => m.l + (v / xMax) * (CW - m.l - m.r);
+  const sy = v => CH - m.b - (v / yMax) * (CH - m.t - m.b);
+  let s = "";
+  const step = niceStep(yMax / 5);
+  for (let v = 0; v <= yMax; v += step) {
+    s += `<line x1="${m.l}" x2="${CW - m.r}" y1="${sy(v)}" y2="${sy(v)}" stroke="var(--surface-3)" stroke-width="1"/>`;
+    s += `<text x="${m.l - 8}" y="${sy(v) + 4}" text-anchor="end" font-size="11" fill="var(--text-muted)">${(v / 1000).toFixed(step < 1000 ? 1 : 0)}s</text>`;
+  }
+  for (const r of expResults) s += `<text x="${sx(r.loss)}" y="${CH - m.b + 18}" text-anchor="middle" font-size="11" fill="var(--text-muted)">${Math.round(r.loss * 100)}%</text>`;
+  s += `<text x="${(m.l + CW - m.r) / 2}" y="${CH - 6}" text-anchor="middle" font-size="12" fill="var(--text-secondary)">${t.xAxis}</text>`;
+  s += `<text x="14" y="${(m.t + CH - m.b) / 2}" text-anchor="middle" font-size="12" fill="var(--text-secondary)" transform="rotate(-90 14 ${(m.t + CH - m.b) / 2})">${t.yAxis}</text>`;
+  const series = [
+    { key: "median", label: "Median", color: "var(--series-1)" },
+    { key: "p90", label: "90th percentile", color: "var(--series-2)" },
+  ];
+  for (const se of series) {
+    const d = pts.map((r, i) => `${i ? "L" : "M"}${sx(r.loss).toFixed(1)},${sy(r[se.key]).toFixed(1)}`).join(" ");
+    s += `<path d="${d}" fill="none" stroke="${se.color}" stroke-width="2" stroke-linejoin="round"/>`;
+    for (const r of pts) s += `<circle cx="${sx(r.loss)}" cy="${sy(r[se.key])}" r="4.5" fill="${se.color}" stroke="var(--surface-1)" stroke-width="2"/>`;
+    const lastP = pts[pts.length - 1];
+    s += `<text x="${sx(lastP.loss) + 10}" y="${sy(lastP[se.key]) + 4}" font-size="12" fill="var(--text-secondary)">${se.label}</text>`;
+  }
+  for (const r of pts) s += `<rect class="hit" data-loss="${r.loss}" x="${sx(r.loss) - 20}" y="${m.t}" width="40" height="${CH - m.t - m.b}" fill="transparent"/>`;
+  s += `<line id="xhair" x1="0" x2="0" y1="${m.t}" y2="${CH - m.b}" stroke="var(--text-muted)" stroke-width="1" visibility="hidden"/>`;
+  ch.innerHTML = s;
+
+  const tip = $("tip"), wrap = $("chartWrap"), xh = ch.querySelector("#xhair");
+  ch.querySelectorAll(".hit").forEach(h => {
+    h.addEventListener("mousemove", e => {
+      const r = expResults.find(x => x.loss === parseFloat(h.dataset.loss));
+      tip.innerHTML = `<b>${Math.round(r.loss * 100)}% ${t.xAxis.toLowerCase()}</b><br><span style="color:var(--series-1)">●</span> Median ${fmtS(r.median)}<br><span style="color:var(--series-2)">●</span> 90th pct ${fmtS(r.p90)}<br>${t.thTerms} ${r.meanTerms.toFixed(2)}<br>${t.thRec} ${r.succeeded}/${r.trials}`;
+      tip.style.display = "block";
+      const b = wrap.getBoundingClientRect();
+      tip.style.left = Math.min(e.clientX - b.left + 12, b.width - 190) + "px";
+      tip.style.top = (e.clientY - b.top + 12) + "px";
+      xh.setAttribute("x1", sx(r.loss)); xh.setAttribute("x2", sx(r.loss)); xh.setAttribute("visibility", "visible");
+    });
+    h.addEventListener("mouseleave", () => { tip.style.display = "none"; xh.setAttribute("visibility", "hidden"); });
+  });
+}
+function niceStep(raw) {
+  const p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p;
+  return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p;
+}
+
+// ---------- start ----------
+resetCluster();
+applyMode("concert");
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
