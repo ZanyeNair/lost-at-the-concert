@@ -1,0 +1,117 @@
+LOST AT THE CONCERT: MEASURING HOW RAFT RECOVERS ON UNRELIABLE NETWORKS
+Talking points - Zayne - Nov 19, 2026
+
+
+THE 30-SECOND VERSION
+- Ever lost your friends at a concert with no signal? Everyone's texting different meetup spots and nobody knows which one's real.
+- Computers have the exact same problem, and there's an algorithm called Raft that solves it. It's what keeps Kubernetes running.
+- I built a simulator that shows Raft as friends at a concert, then broke it on purpose to see how it holds up.
+- Big takeaway: bad signal never made Raft give a wrong answer, it just made it slower.
+
+
+HOW RAFT WORKS (THE CONCERT VERSION)
+- One friend is the captain who decides where to meet. Everyone else follows.
+- The captain keeps sending "still here" texts. If you stop hearing from them, you wait a random bit, then ask the group "can I call the spot?"
+- A plan only counts once more than half the group has it. That's the whole trick.
+- Why half? Any two majorities always share at least one person, so a new captain always knows what was already decided.
+- Here's how it maps:
+
+    At the concert                                   In Raft
+    -----------------------------------------------  ----------------------------------
+    Captain who calls the meetup spot                 Leader
+    "Still here" check-in texts                       Heartbeats
+    Friend asks "Can I call the spot?"                Election timeout, then RequestVote
+    Plan locked in once most friends have it          Entry committed by a majority
+    Phone dies                                        Node crash
+    Texts that fail                                   Packet loss
+    Crowd surge splits the group                      Network partition
+    Cut-off captain's plans thrown out afterward      Uncommitted entries overwritten
+
+- This isn't just theory. Kubernetes, CockroachDB and a bunch of other real systems run on Raft.
+
+
+WHAT I BUILT
+- A web simulator where you can watch Raft happen live (it's on my GitHub).
+- You can mess with it: kill the captain's phone, cause a crowd surge that splits the group, or make texts randomly fail.
+- There's a toggle that flips everything from the concert story to the real technical terms.
+- The experiment: crash the captain, then time how long until someone new takes over. Repeat 100 times for each setting.
+- Making sure it's right: before trusting any numbers, I threw a ton of random chaos at it. It never ended up with two captains at once or friends disagreeing on a locked-in plan.
+
+
+FINDING 1: BAD SIGNAL = SLOW REGROUP
+(5 friends, 100 trials per level)
+
+    Texts that fail   Median time to new captain   90th percentile   Recovered within 60 s
+    ---------------   --------------------------   ---------------   ---------------------
+    0%                2.7 s                        4.5 s             100%
+    10%               2.9 s                        6.6 s             100%
+    20%               3.2 s                        10.2 s            100%
+    30%               5.4 s                        14.5 s            100%
+    40%               7.3 s                        24.4 s            100%
+    50%               12.9 s                       40.8 s            96%
+    60%               24.0 s                       47.7 s            76%
+
+- Up to about 20% of texts failing, Raft basically doesn't care. A new captain in about 3 seconds.
+- After that it falls off a cliff. At 40% failed texts it's 7 seconds, and at 60% it's 24.
+- And at 60%, about 1 in 4 groups never picked a new captain within a minute.
+- So if you're building something on a bad network (like a drone swarm on spotty radio), you have to plan for this.
+
+
+FINDING 2: IS A BIGGER FRIEND GROUP BETTER?
+(Median time to new captain, 100 trials each)
+
+    Texts that fail   3 friends   5 friends   7 friends
+    ---------------   ---------   ---------   ---------
+    0%                3.0 s       2.7 s       2.6 s
+    20%               4.7 s       3.2 s       3.0 s
+    40%               6.1 s       7.3 s       11.0 s
+
+- Good signal: size doesn't really matter. Everyone regroups in under 3 seconds.
+- A little bad signal: the group of 3 is actually the slowest. One failed text can block a majority when there's only 3 of you.
+- Really bad signal: the group of 7 is the slowest (11 s vs 6 s), because the new captain needs 4 replies to get through.
+- The trade-off is that bigger groups can lose more phones and still work:
+
+    Group size   Majority needed   Phones that can die   Messages per check-in round
+    ----------   ---------------   -------------------   ---------------------------
+    3            2                 1                     4
+    5            3                 2                     8
+    7            4                 3                     12
+
+- That's why real systems almost always use 5. It survives 2 failures without being too slow.
+
+
+FINDING 3: EVERYONE CAN'T LOSE PATIENCE AT THE SAME TIME
+If 3 friends all ask "can I call the spot?" at the same moment, the votes split, nobody wins, and they try again. Raft avoids this by making everyone's patience a little random. I tested how random it needs to be:
+
+    Patience range         Width   Recovered within 60 s   Median recovery   Needed a re-vote
+    --------------------   -----   ---------------------   ---------------   ----------------
+    1.5-1.6 s              0.1 s   35%                     27.1 s            100%
+    1.5-2.0 s              0.5 s   100%                    4.9 s             67%
+    1.5-3.0 s (default)    1.5 s   100%                    2.7 s             14%
+    1.5-4.5 s              3.0 s   100%                    2.9 s             9%
+
+- Almost no randomness (0.1 s) was a disaster. Two-thirds of groups never picked a captain.
+- A 1.5-second range fixed it completely.
+- The lesson: the randomness has to be bigger than how long texts take to arrive, or people talk over each other.
+
+
+WHY THIS MATTERS
+- Slow is fine, wrong is not. For a bank or a hospital, waiting a few extra seconds is okay. Two servers disagreeing about your money or your medication dose is not.
+- No human needed. When the captain goes down, the group fixes itself.
+- The crowd-surge demo is the coolest part: the cut-off captain keeps making plans, but they never lock in. When the crowd clears, those plans get thrown out and nobody goes to the wrong spot.
+- Where it shows up in real life: cloud servers (Kubernetes), databases, robot and drone swarms, hospital record systems.
+- And honestly, every group project. Leader ghosts, nobody knows who's in charge, two people make conflicting plans. Same problem.
+
+
+WHAT'S NEXT
+- What it doesn't do yet: it's a simulation, not real hardware, and real networks lose texts in bursts, not randomly. I also slowed the timing way down so you can actually watch it.
+- What I want to add:
+    [ ] PreVote: fix the bathroom-line problem, where someone comes back from no signal and knocks out a perfectly good captain.
+    [ ] CheckQuorum: make a cut-off captain realize they're cut off and step down.
+    [ ] A live safety checker that catches bugs when I break the code on purpose.
+    [ ] Real hardware: run it on actual ESP32 boards over radio and compare.
+
+
+REFERENCES
+- Diego Ongaro and John Ousterhout, "In Search of an Understandable Consensus Algorithm," USENIX ATC 2014. https://raft.github.io
+- Diego Ongaro, "Consensus: Bridging Theory and Practice," PhD dissertation, Stanford University, 2014 (source of PreVote and CheckQuorum).
