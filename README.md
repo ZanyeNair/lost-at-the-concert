@@ -40,7 +40,7 @@ Anyone can start the show, and bots can fill in empty spots.
 Kill your own phone, kill the captain's, change how many texts fail, or split the crowd.
 The page measures real round-trip times between devices and how long each regroup took, and can copy the results as CSV.
 
-Live mode uses Claude's live rooms, so it works when the page is opened from claude.ai by signed-in people the page is shared with (Contributor access to take part). On GitHub Pages the simulator works, but Live mode can't connect.
+**How the devices talk:** Live mode uses MQTT, the publish/subscribe protocol IoT devices use, through a free public broker (HiveMQ, with EMQX and Mosquitto as backups). No accounts needed: anyone with the link and the show code can join.
 
 Key finding
 

@@ -289,6 +289,7 @@
         <div class="row"><label for="botCount">Bots to add</label><select id="botCount"><option>0</option><option>1</option><option selected>2</option><option>3</option><option>4</option></select></div>
         <button id="liveStartBtn" class="primary big-btn">🎤 Start the show</button>
         <p class="hint">Raft needs at least 3 friends. Bots run on the device that starts the show, but they still text over the real network.</p>
+        <p class="hint" id="brokerInfo"></p>
         <div class="btns" style="margin-top:8px"><button id="liveLeaveBtn">Leave show</button></div>
         <div id="liveBanner"></div>
       </div>
@@ -341,6 +342,8 @@
   </section>
 </div><!-- /liveView -->
 
+<script src="mqtt.min.js"></script>
+<script>window.mqtt || document.write('<script src="https://unpkg.com/mqtt@5.16.1/dist/mqtt.min.js"><\/script>')</script>
 <script>
 "use strict";
 // ======================================================================
@@ -1535,6 +1538,108 @@ class LiveNode {
 // LIVE-ENGINE-END
 
 // ======================================================================
+//  Network for Live mode outside claude.ai: MQTT over WebSockets.
+//  MQTT is the publish/subscribe protocol IoT devices use. Every device
+//  subscribes to its show's topic; a message published there reaches
+//  everyone in the show (including the sender, as an echo).
+//    lostconcert/v1/<show>/ev/<topic>  = moments (Raft messages, show config, controls)
+//    lostconcert/v1/<show>/pr/<peer>   = each device's current status (retained;
+//                                       cleared by MQTT's "last will" if it drops off)
+//  Add ?broker=wss://your-broker/mqtt to the URL to use a different broker.
+// ======================================================================
+const BROKERS = ["wss://broker.hivemq.com:8884/mqtt", "wss://broker.emqx.io:8084/mqtt", "wss://test.mosquitto.org:8081/mqtt"];
+function mqttRoomApi() {
+  return {
+    join: name => new Promise((resolve, reject) => {
+      let qp = null;
+      try { qp = new URLSearchParams(location.search).get("broker"); } catch (e) {}
+      const list = qp && /^wss?:\/\//.test(qp) ? [qp] : BROKERS;
+      let i = 0;
+      const tryNext = () => {
+        if (i >= list.length) { reject({ code: "upstream_error" }); return; }
+        const url = list[i++];
+        const me = "p" + newId() + newId();
+        const base = "lostconcert/v1/" + name + "/";
+        let client, settled = false;
+        try {
+          client = mqtt.connect(url, { clientId: "lc_" + me, clean: true, keepalive: 20, reconnectPeriod: 2000, connectTimeout: 6000, will: { topic: base + "pr/" + me, payload: "", retain: true, qos: 0 } });
+        } catch (e) { tryNext(); return; }
+        const fail = () => { if (settled) return; settled = true; clearTimeout(timer); try { client.end(true); } catch (e) {} tryNext(); };
+        const timer = setTimeout(fail, 7000);
+        client.on("error", fail);
+        client.on("connect", () => {
+          if (settled) return;
+          client.subscribe(base + "#", { qos: 0 }, err => {
+            if (err) { fail(); return; }
+            settled = true; clearTimeout(timer);
+            resolve(mqttRoom(client, base, me, url));
+          });
+        });
+      };
+      tryNext();
+    }),
+  };
+}
+
+function mqttRoom(client, base, me, url) {
+  const ls = {}, pl = [], peers = new Map();
+  let mine = {}, pubTimer = null;
+  const self = () => ({ peer: me, presence: mine, updatedAt: Date.now(), isMe: true, sameTab: true, kind: "viewer", guest: false, by: null });
+  const snap = () => [self(), ...[...peers].map(([peer, v]) => ({ peer, presence: v.presence, updatedAt: v.t, isMe: false, sameTab: false, kind: "viewer", guest: false, by: null }))];
+  const notify = (joined, left) => { const s = snap(); pl.forEach(f => { try { f({ peers: s, joined, left, updated: [] }); } catch (e) { console.warn(e); } }); };
+  const publishPresence = () => { pubTimer = null; if (client.connected) client.publish(base + "pr/" + me, JSON.stringify(mine), { retain: true, qos: 0 }); };
+
+  client.on("message", (topic, buf) => {
+    if (!topic.startsWith(base) || buf.length > 16000) return;
+    const rest = topic.slice(base.length), txt = buf.toString();
+    if (rest.startsWith("pr/")) {
+      const peer = rest.slice(3);
+      if (peer === me || !/^p[a-z0-9]{6,24}$/.test(peer)) return;
+      if (!txt) { if (peers.delete(peer)) notify([], [{ peer }]); return; }
+      let pres; try { pres = JSON.parse(txt); } catch (e) { return; }
+      if (!pres || typeof pres !== "object" || Array.isArray(pres)) return;
+      const isNew = !peers.has(peer);
+      peers.set(peer, { presence: Object.freeze(pres), t: Date.now() });
+      notify(isNew ? [{ peer, presence: pres }] : [], []);
+    } else if (rest.startsWith("ev/")) {
+      const t = rest.slice(3);
+      let d; try { d = JSON.parse(txt); } catch (e) { return; }
+      if (!d || typeof d.peer !== "string") return;
+      const isMe = d.peer === me;
+      (ls[t] || []).forEach(f => { try { f({ topic: t, data: d.data, peer: d.peer, isMe, sameTab: isMe, kind: "viewer", guest: false, by: null }); } catch (e) { console.warn(e); } });
+    }
+  });
+  // Keep my status fresh, and forget devices that went quiet (closed laptop, dead battery).
+  const keepAlive = setInterval(() => {
+    publishPresence();
+    const now = Date.now(), gone = [];
+    for (const [peer, v] of peers) if (now - v.t > 15000) { peers.delete(peer); gone.push({ peer }); }
+    if (gone.length) notify([], gone);
+  }, 5000);
+
+  return {
+    name: base, broker: url.replace(/^wss?:\/\//, "").replace(/[:/].*$/, ""),
+    emit: (topic, data) => { if (client.connected) client.publish(base + "ev/" + topic, JSON.stringify({ peer: me, data }), { qos: 0 }); return Promise.resolve(); },
+    on: (topic, f) => { (ls[topic] = ls[topic] || []).push(f); return () => { ls[topic] = (ls[topic] || []).filter(x => x !== f); }; },
+    presence: patch => {
+      for (const [k, v] of Object.entries(patch)) { if (v === null) delete mine[k]; else mine[k] = v; }
+      mine = { ...mine };
+      if (!pubTimer) pubTimer = setTimeout(publishPresence, 120);
+      return Promise.resolve();
+    },
+    peers: snap,
+    onPeers: f => { pl.push(f); setTimeout(() => { const s = snap(); f({ peers: s, joined: s, left: [], updated: [] }); }, 0); return () => { const k = pl.indexOf(f); if (k >= 0) pl.splice(k, 1); }; },
+    connected: () => client.connected,
+    onConnection: f => { client.on("connect", () => f(true)); client.on("offline", () => f(false)); setTimeout(() => f(client.connected), 0); return () => {}; },
+    leave: () => new Promise(res => {
+      clearInterval(keepAlive);
+      try { client.publish(base + "pr/" + me, "", { retain: true, qos: 0 }, () => { client.end(false, {}, res); }); } catch (e) { res(); }
+      setTimeout(res, 1500);
+    }),
+  };
+}
+
+// ======================================================================
 //  LIVE MODE: real devices, real network (the page's `room`)
 // ======================================================================
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1606,14 +1711,14 @@ async function liveJoin() {
   const name = cleanName($("liveName").value);
   if (code.length < 3) { $("liveJoinStatus").textContent = "Show code needs at least 3 letters or numbers."; return; }
   if (!name) { $("liveJoinStatus").textContent = "Type your name so friends know who you are."; return; }
-  if (!live.api) { $("liveJoinStatus").textContent = "Live mode isn't available here. Open this page on claude.ai while signed in (it uses Claude's live rooms)."; return; }
+  if (!live.api) { $("liveJoinStatus").textContent = "Live mode couldn't load its messaging library. Check your internet connection and refresh."; return; }
   $("liveJoinBtn").disabled = true;
-  $("liveJoinStatus").textContent = "Joining…";
+  $("liveJoinStatus").textContent = "Connecting to the show server…";
   try {
     live.room = await live.api.join("show-" + code);
   } catch (e) {
     $("liveJoinBtn").disabled = false;
-    $("liveJoinStatus").textContent = e && e.code === "not_permitted" ? "Your account can't use live rooms on this page." : "Couldn't join right now. Try again in a moment.";
+    $("liveJoinStatus").textContent = e && e.code === "not_permitted" ? "Your account can't use live rooms on this page." : "Couldn't reach the show server. Some school or work Wi-Fi blocks it: try phone data or another network.";
     return;
   }
   live.code = code; live.name = name;
@@ -1625,6 +1730,8 @@ async function liveJoin() {
   r.presence({ nodeId: live.myId, name });
   $("joinCard").hidden = true; $("lobbyCard").hidden = false;
   $("lobbyCode").textContent = code;
+  $("liveJoinStatus").textContent = "";
+  $("brokerInfo").textContent = r.broker ? `Connected through ${r.broker} (public MQTT broker). Anyone with this page and the code can join.` : "";
   renderLobby();
 }
 
@@ -1993,8 +2100,10 @@ $("liveName").addEventListener("change", e => { try { localStorage.setItem("conc
 
 // Light up live mode once the platform answers (null = this view can't connect).
 (async () => {
-  try { live.api = window.claude && typeof window.claude.use === "function" ? await window.claude.use("room") : null; } catch (e) { live.api = null; }
-  if (!live.api) $("liveJoinStatus").textContent = "Live mode needs this page open on claude.ai while signed in. The simulator tab works anywhere.";
+  let claudeRoom = null;
+  try { claudeRoom = window.claude && typeof window.claude.use === "function" ? await window.claude.use("room") : null; } catch (e) { claudeRoom = null; }
+  live.api = claudeRoom || (window.mqtt ? mqttRoomApi() : null);
+  if (!live.api) $("liveJoinStatus").textContent = "Live mode couldn't load its messaging library. Check your internet connection and refresh.";
 })();
 
 // ---------- start ----------
