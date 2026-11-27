@@ -1,6 +1,6 @@
 🎤 Lost at the Concert: How Friends (and Servers) Agree
 
-Live demo: https://YOUR-USERNAME.github.io/lost-at-the-concert/
+Live demo: https://ZanyeNair.github.io/lost-at-the-concert/
 
 An interactive simulator of the Raft consensus algorithm, the algorithm that keeps systems like Kubernetes (via etcd) consistent, told through a story everyone has lived: a group of friends at a packed concert, with bad signal, trying to agree on where to meet.
 
