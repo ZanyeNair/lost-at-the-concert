@@ -113,6 +113,20 @@
   .raft-only, .concert-only { }
   .concert .raft-only { display: none !important; }
   .raft .concert-only { display: none !important; }
+  nav.views { display: flex; gap: 8px; padding: 0 24px 4px; }
+  nav.views button { border-radius: 8px 8px 0 0; border-bottom: 0; padding: 8px 16px; color: var(--text-secondary); background: var(--surface-1); }
+  nav.views button.on { color: #fff; background: var(--surface-3); border-color: var(--append); }
+  .live-intro { text-align: center; padding: 60px 30px; color: var(--text-secondary); }
+  .live-intro h3 { color: var(--text-primary); font-size: 20px; margin: 0 0 8px; }
+  .live-intro ol { text-align: left; display: inline-block; margin: 16px auto 0; line-height: 1.9; }
+  .peer-list { list-style: none; margin: 0; padding: 0; }
+  .peer-list li { padding: 6px 0; border-bottom: 1px solid var(--surface-2); display: flex; justify-content: space-between; gap: 8px; }
+  .peer-list .you { color: var(--append-reply); font-size: 12px; }
+  .banner { background: #3a2a14; border: 1px solid #6b4c1a; color: #f0c060; border-radius: 8px; padding: 8px 10px; font-size: 12px; margin-top: 8px; }
+  .banner.err { background: #3a1a1a; border-color: #6b2a2a; color: var(--danger); }
+  .regroups { font-variant-numeric: tabular-nums; }
+  .big-btn { width: 100%; padding: 10px; font-size: 15px; }
+  input.code { text-transform: lowercase; letter-spacing: 0.08em; font-family: ui-monospace, Menlo, monospace; }
 </style>
 </head>
 <body class="concert">
@@ -127,6 +141,13 @@
     <button id="modeRaft">⚙️ Real Raft terms</button>
   </div>
 </header>
+
+<nav class="views" aria-label="View">
+  <button id="viewSolo" class="on">🎛️ Simulator</button>
+  <button id="viewLive">📱 Live with friends</button>
+</nav>
+
+<div id="soloView">
 
 <main>
   <section class="card stage">
@@ -233,6 +254,92 @@
     </div>
   </div>
 </section>
+</div><!-- /soloView -->
+
+<div id="liveView" hidden>
+  <main>
+    <section class="card stage">
+      <div id="liveIntro" class="live-intro">
+        <h3>Every device is one friend in the crowd 📱</h3>
+        <div>No simulation here: each phone or laptop runs its own copy of Raft and texts the others over the real internet.</div>
+        <ol>
+          <li>Pick a show code and your name, then <b>Join</b>.</li>
+          <li>Friends open this same page on their own devices and join the same code.</li>
+          <li>Anyone presses <b>Start the show</b>. Bots can fill empty spots.</li>
+          <li>Kill your own phone, kill the captain, split the crowd, and watch the group regroup for real.</li>
+        </ol>
+      </div>
+      <svg id="liveViz" viewBox="0 0 760 540" role="img" aria-label="Live friend group" hidden></svg>
+      <div class="legend" id="liveLegend" hidden></div>
+      <div class="statbar" id="liveStats"></div>
+    </section>
+
+    <aside>
+      <div class="card" id="joinCard">
+        <h2>Join a show</h2>
+        <div class="row"><label for="liveCode">Show code</label><input type="text" id="liveCode" class="code" maxlength="20" style="flex:1;min-width:0"></div>
+        <div class="row"><label for="liveName">Your name</label><input type="text" id="liveName" maxlength="14" placeholder="e.g. Zayne" style="flex:1;min-width:0"></div>
+        <button id="liveJoinBtn" class="primary big-btn">Join</button>
+        <p class="hint" id="liveJoinStatus">Everyone who types the same code ends up at the same show.</p>
+      </div>
+
+      <div class="card" id="lobbyCard" hidden>
+        <h2>Show <span id="lobbyCode"></span></h2>
+        <ul class="peer-list" id="peerList"></ul>
+        <div class="row"><label for="botCount">Bots to add</label><select id="botCount"><option>0</option><option>1</option><option selected>2</option><option>3</option><option>4</option></select></div>
+        <button id="liveStartBtn" class="primary big-btn">🎤 Start the show</button>
+        <p class="hint">Raft needs at least 3 friends. Bots run on the device that starts the show, but they still text over the real network.</p>
+        <div class="btns" style="margin-top:8px"><button id="liveLeaveBtn">Leave show</button></div>
+        <div id="liveBanner"></div>
+      </div>
+
+      <div class="card" id="meCard" hidden>
+        <h2>Your phone</h2>
+        <div class="sel-info" id="meInfo"></div>
+        <div class="btns" style="margin-top:8px"><button id="meToggle" class="danger">🔋 Kill my phone</button></div>
+        <div class="row" style="margin-top:10px">
+          <select id="livePreset" style="flex:1;min-width:0"></select>
+          <button id="liveSend">Text group</button>
+        </div>
+        <p class="hint">Plan updates only lock in once most of the group gets them from the captain.</p>
+      </div>
+
+      <div class="card" id="hostCard" hidden>
+        <h2>Show controls</h2>
+        <div class="row"><label for="liveLoss">Texts that fail</label><input type="range" id="liveLoss" min="0" max="0.6" step="0.05" value="0"><output id="liveLossOut">0%</output></div>
+        <div class="btns">
+          <button id="liveKillCaptain" class="danger">🔋 Kill the captain's phone</button>
+          <button id="liveSurge">🌊 Crowd surge</button>
+          <button id="liveHeal">✨ Crowd clears</button>
+          <button id="liveReviveAll">🔌 Charge everyone</button>
+        </div>
+        <p class="hint" id="hostHint"></p>
+      </div>
+    </aside>
+  </main>
+
+  <section class="lower">
+    <div class="card">
+      <h2>Everyone's texts</h2>
+      <div class="plan-card" id="livePlan"></div>
+      <div id="liveLogs"></div>
+    </div>
+    <div class="card">
+      <h2>Group chat</h2>
+      <ul id="liveEvents" style="font-size:13px;max-height:300px;overflow:auto;margin:0;padding:0;list-style:none"></ul>
+    </div>
+  </section>
+
+  <section class="exp">
+    <div class="card">
+      <h2>Real-world measurements</h2>
+      <p class="hint" style="margin-top:0">Measured on real devices, not simulated. Every time the group loses its captain, this page times how long until a new one takes over.</p>
+      <div class="statbar" id="liveMeasure"></div>
+      <div id="regroupTable"></div>
+      <div class="btns" style="margin-top:8px"><button id="liveCopy">Copy results</button></div>
+    </div>
+  </section>
+</div><!-- /liveView -->
 
 <script>
 "use strict";
@@ -897,9 +1004,10 @@ function frame(now) {
   const realDt = Math.min(100, now - last);
   last = now;
   if (!paused) advance(realDt * speed);
-  renderViz();
+  const liveOn = !document.getElementById("liveView").hidden;
+  if (liveOn) renderLive(); else renderViz();
   panelTimer += realDt;
-  if (panelTimer > 100) { panelTimer = 0; renderPanels(); }
+  if (panelTimer > 100) { panelTimer = 0; if (liveOn) renderLivePanels(); else renderPanels(); }
   requestAnimationFrame(frame);
 }
 function nextCommand() {
@@ -1028,6 +1136,7 @@ svg.addEventListener("click", e => {
 });
 
 document.addEventListener("keydown", e => {
+  if (!document.getElementById("liveView").hidden) return;
   if (e.target.tagName === "INPUT" && e.target.type !== "checkbox") return;
   if (e.target.tagName === "SELECT") return;
   const k = e.key.toLowerCase();
@@ -1175,6 +1284,718 @@ function niceStep(raw) {
   const p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p;
   return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p;
 }
+
+// LIVE-ENGINE-START
+// ======================================================================
+//  LiveNode: ONE Raft node that lives on one device and talks to the
+//  others over a real network (the page's room). Same Raft rules as the
+//  simulator, but nothing here can see another node's memory: everything
+//  it knows arrives in a message.
+//  Log entries are compact [term, cmd] pairs: cmd = index into PRESETS,
+//  or -1 for the new captain's no-op.
+// ======================================================================
+const LIVE_TYPES = ["RV", "VR", "AE", "AR"];
+const isInt = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
+const isId = v => typeof v === "string" && /^[a-z0-9]{4,12}$/.test(v);
+
+// Everything another device sends is untrusted: check its shape before use.
+function validLiveMsg(m, nCmds) {
+  if (!m || typeof m !== "object") return false;
+  if (!isId(m.f) || !(m.to === "*" || isId(m.to)) || !LIVE_TYPES.includes(m.t)) return false;
+  const p = m.p;
+  if (!p || typeof p !== "object" || !isInt(p.term, 0, 1e7)) return false;
+  const okEntry = e => Array.isArray(e) && e.length === 2 && isInt(e[0], 0, 1e7) && isInt(e[1], -1, nCmds - 1);
+  switch (m.t) {
+    case "RV": return isInt(p.li, 0, 1e6) && isInt(p.lt, 0, 1e7);
+    case "VR": return typeof p.g === "boolean";
+    case "AE": {
+      if (!isInt(p.lc, 0, 1e6) || typeof p.echo !== "number" || !p.per || typeof p.per !== "object") return false;
+      const ks = Object.keys(p.per);
+      if (ks.length > 12) return false;
+      return ks.every(k => {
+        const v = p.per[k];
+        return isId(k) && v && isInt(v.prev, 0, 1e6) && isInt(v.pt, -1, 1e7) && Array.isArray(v.e) && v.e.length <= 8 && v.e.every(okEntry);
+      });
+    }
+    case "AR": return typeof p.ok === "boolean" && (p.mi === undefined || isInt(p.mi, 0, 1e6)) && (p.hint === undefined || isInt(p.hint, 0, 1e6)) && typeof p.echo === "number";
+  }
+  return false;
+}
+
+class LiveNode {
+  // io = { now(), send(msg), cfg() -> {electionMin, electionMax, heartbeat, loss}, side(id), dropped(msg, at, why), event(type, data), applyCmd(kv, cmd) }
+  constructor(id, members, io) {
+    this.id = id;
+    this.members = members.slice();
+    this.io = io;
+    this.alive = true;
+    this.state = "follower";
+    this.term = 0; this.votedFor = null; this.log = [];
+    this.commitIndex = 0; this.lastApplied = 0; this.kv = {};
+    this.votes = new Set(); this.leaderId = null;
+    this.nextIndex = {}; this.matchIndex = {};
+    this.hbDue = 0; this.rtts = [];
+    this.resetTimer();
+  }
+  get n() { return this.members.length; }
+  majority() { return Math.floor(this.n / 2) + 1; }
+  others() { return this.members.filter(m => m !== this.id); }
+  resetTimer() {
+    const c = this.io.cfg();
+    this.timerSet = this.io.now();
+    this.deadline = this.timerSet + c.electionMin + Math.random() * Math.max(0, c.electionMax - c.electionMin);
+  }
+  lastIndex() { return this.log.length; }
+  lastTerm() { return this.log.length ? this.log[this.log.length - 1][0] : 0; }
+  termAt(i) { return i === 0 ? 0 : (this.log[i - 1] ? this.log[i - 1][0] : -1); }
+  send(to, t, p) { if (this.alive) this.io.send({ f: this.id, to, t, p }); }
+
+  tick() {
+    if (!this.alive) return;
+    const now = this.io.now();
+    if (this.state === "leader") {
+      if (now >= this.hbDue) { this.broadcastAppend(this.others()); this.hbDue = now + this.io.cfg().heartbeat; }
+    } else if (now >= this.deadline) {
+      this.startElection();
+    }
+  }
+
+  // Returns true if this node actually processed the message.
+  receive(m) {
+    if (!this.alive || m.f === this.id || !this.members.includes(m.f)) return false;
+    if (m.to !== "*" && m.to !== this.id) return false;
+    if (m.t === "AE" && !m.p.per[this.id]) return false;          // a batch for other followers
+    if (this.io.side(m.f) !== this.io.side(this.id)) { this.io.dropped(m, this.id, "partition"); return false; }
+    if (Math.random() < this.io.cfg().loss) { this.io.dropped(m, this.id, "loss"); return false; }
+    this.handle(m);
+    return true;
+  }
+
+  stepDown(term) {
+    if (term > this.term) { this.term = term; this.votedFor = null; }
+    if (this.state !== "follower") {
+      const was = this.state;
+      this.state = "follower";
+      if (was === "leader") this.resetTimer();
+      this.io.event("stepdown", { id: this.id, from: was, term: this.term });
+    }
+  }
+
+  startElection() {
+    this.state = "candidate"; this.term++; this.votedFor = this.id;
+    this.votes = new Set([this.id]); this.leaderId = null;
+    this.resetTimer();
+    this.io.event("timeout", { id: this.id, term: this.term });
+    this.send("*", "RV", { term: this.term, li: this.lastIndex(), lt: this.lastTerm() });
+    if (this.votes.size >= this.majority()) this.becomeLeader();
+  }
+
+  becomeLeader() {
+    this.state = "leader"; this.leaderId = this.id;
+    for (const m of this.members) { this.nextIndex[m] = this.lastIndex() + 1; this.matchIndex[m] = 0; }
+    this.log.push([this.term, -1]);                    // no-op (Raft §8)
+    this.matchIndex[this.id] = this.lastIndex();
+    this.io.event("won", { id: this.id, votes: this.votes.size, n: this.n, term: this.term });
+    this.broadcastAppend(this.others());
+    this.hbDue = this.io.now() + this.io.cfg().heartbeat;
+  }
+
+  // One network message carries a separate slice of the log for each follower.
+  broadcastAppend(peers) {
+    if (!peers.length) return;
+    const per = {};
+    for (const p of peers) {
+      const prev = this.nextIndex[p] - 1;
+      per[p] = { prev, pt: this.termAt(prev), e: this.log.slice(prev, prev + 8).map(e => [e[0], e[1]]) };
+    }
+    this.send("*", "AE", { term: this.term, lc: this.commitIndex, per, echo: this.io.now() });
+  }
+
+  handle(m) {
+    const p = m.p;
+    if (p.term > this.term) this.stepDown(p.term);
+    switch (m.t) {
+      case "RV": {
+        let g = false;
+        if (p.term >= this.term && (this.votedFor === null || this.votedFor === m.f)) {
+          const upToDate = p.lt > this.lastTerm() || (p.lt === this.lastTerm() && p.li >= this.lastIndex());
+          if (upToDate) { g = true; this.votedFor = m.f; this.resetTimer(); }
+        }
+        this.send(m.f, "VR", { term: this.term, g });
+        break;
+      }
+      case "VR": {
+        if (this.state === "candidate" && p.term === this.term && p.g) {
+          this.votes.add(m.f);
+          if (this.votes.size >= this.majority()) this.becomeLeader();
+        }
+        break;
+      }
+      case "AE": {
+        const mine = p.per[this.id];
+        if (p.term < this.term) { this.send(m.f, "AR", { term: this.term, ok: false, echo: p.echo }); break; }
+        if (this.state !== "follower") this.stepDown(p.term);
+        this.leaderId = m.f;
+        this.resetTimer();
+        if (mine.prev > this.lastIndex() || this.termAt(mine.prev) !== mine.pt) {
+          const hint = mine.prev > this.lastIndex() ? this.lastIndex() + 1 : mine.prev;
+          this.send(m.f, "AR", { term: this.term, ok: false, hint: Math.max(1, hint), echo: p.echo });
+          break;
+        }
+        let idx = mine.prev;
+        for (const e of mine.e) {
+          idx++;
+          if (this.log.length >= idx) {
+            if (this.log[idx - 1][0] !== e[0]) {
+              const removed = this.log.length - (idx - 1);
+              this.log.length = idx - 1;
+              this.log.push([e[0], e[1]]);
+              this.io.event("truncate", { id: this.id, removed });
+            }
+          } else this.log.push([e[0], e[1]]);
+        }
+        const lastNew = mine.prev + mine.e.length;
+        if (p.lc > this.commitIndex) this.commitIndex = Math.min(p.lc, lastNew);
+        this.apply();
+        this.send(m.f, "AR", { term: this.term, ok: true, mi: lastNew, echo: p.echo });
+        break;
+      }
+      case "AR": {
+        if (this.state !== "leader" || p.term !== this.term) break;
+        const rtt = this.io.now() - p.echo;
+        if (rtt >= 0 && rtt < 30000) { this.rtts.push(rtt); if (this.rtts.length > 40) this.rtts.shift(); }
+        if (p.ok) {
+          if ((p.mi || 0) > (this.matchIndex[m.f] || 0)) this.matchIndex[m.f] = p.mi;
+          this.nextIndex[m.f] = (this.matchIndex[m.f] || 0) + 1;
+          this.advanceCommit();
+          if (this.nextIndex[m.f] <= this.lastIndex()) this.broadcastAppend([m.f]);
+        } else {
+          this.nextIndex[m.f] = Math.max(1, p.hint || this.nextIndex[m.f] - 1);
+          this.broadcastAppend([m.f]);
+        }
+        break;
+      }
+    }
+  }
+
+  advanceCommit() {
+    for (let N = this.lastIndex(); N > this.commitIndex; N--) {
+      if (this.log[N - 1][0] !== this.term) break;
+      let count = 0;
+      for (const m of this.members) if (m === this.id || (this.matchIndex[m] || 0) >= N) count++;
+      if (count >= this.majority()) {
+        this.commitIndex = N;
+        this.io.event("commit", { id: this.id, index: N, count, n: this.n, cmd: this.log[N - 1][1] });
+        this.apply();
+        break;
+      }
+    }
+  }
+
+  apply() {
+    while (this.lastApplied < this.commitIndex) {
+      this.lastApplied++;
+      this.io.applyCmd(this.kv, this.log[this.lastApplied - 1][1]);
+    }
+  }
+
+  clientWrite(cmd) {
+    if (!this.alive || this.state !== "leader") return false;
+    this.log.push([this.term, cmd]);
+    this.matchIndex[this.id] = this.lastIndex();
+    this.io.event("client", { id: this.id, cmd });
+    this.broadcastAppend(this.others());
+    return true;
+  }
+
+  kill() { if (this.alive) { const wasLeader = this.state === "leader"; this.alive = false; this.io.event("crash", { id: this.id, wasLeader }); } }
+  revive() {
+    if (this.alive) return;
+    this.alive = true; this.state = "follower";
+    this.commitIndex = 0; this.lastApplied = 0; this.kv = {}; this.votes = new Set(); this.leaderId = null;
+    this.resetTimer();
+    this.io.event("restart", { id: this.id });
+  }
+
+  rttMedian() {
+    if (!this.rtts.length) return null;
+    const s = this.rtts.slice().sort((a, b) => a - b);
+    return Math.round(s[Math.floor(s.length / 2)]);
+  }
+
+  // What this node tells everyone else about itself (via presence). Kept small.
+  summary() {
+    const off = Math.max(0, this.log.length - 18);
+    return {
+      i: this.id, a: this.alive ? 1 : 0, s: this.state[0], t: this.term, c: this.commitIndex, o: off,
+      l: this.log.slice(off).map(e => [e[0], e[1]]), kv: { ...this.kv }, r: this.state === "leader" ? this.rttMedian() : null,
+    };
+  }
+}
+// LIVE-ENGINE-END
+
+// ======================================================================
+//  LIVE MODE: real devices, real network (the page's `room`)
+// ======================================================================
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const cleanName = s => String(s || "").replace(/[\u0000-\u001f\u007f-\u009f­​-‏‪-‮⁠-⁯﻿]/g, "").trim().slice(0, 14);
+const newId = () => (Math.random().toString(36).slice(2) + "000000").slice(0, 6);
+function liveApply(kv, c) {
+  if (c < 0) return;
+  const mm = /^SET\s+(\w+)\s*=\s*(.+)$/i.exec(PRESETS[c] || "");
+  if (mm) kv[mm[1]] = mm[2].trim();
+}
+
+const live = {
+  api: null, room: null, unsubs: [], code: "", name: "", myId: newId(),
+  run: null, runStart: 0, hostPeer: null, isHost: false, showTimer: null,
+  members: [], names: {}, bots: [], cfg: { electionMin: 1500, electionMax: 3000, heartbeat: 500, loss: 0 }, sides: {},
+  nodes: {}, summaries: {}, prevSumm: {}, bubbles: [], poofs: [], events: [],
+  regroups: [], leaderless: null, captain: null, lastPresence: 0, canSend: true,
+};
+const liveNow = () => performance.now();
+
+function liveIO(id) {
+  return {
+    now: liveNow,
+    send: m => liveEmit("raft", m),
+    cfg: () => live.cfg,
+    side: x => (live.sides[x] ? 1 : 0),
+    dropped: (m, at) => { live.poofs.push({ from: m.f, to: at, t: liveNow() }); },
+    event: (type, data) => { if (type === "timeout" && data.id === live.myId) liveLog("elect", `You haven't heard from a captain → "Can I call the spot?" (round ${data.term})`); if (type === "truncate") liveLog("warn", `${liveName(data.id)} deletes ${data.removed} plan update${data.removed === 1 ? "" : "s"} that were never agreed on`); },
+    applyCmd: liveApply,
+  };
+}
+function liveName(id) { return live.names[id] || "Someone"; }
+function liveLog(kind, text) {
+  live.events.push({ t: live.runStart ? (liveNow() - live.runStart) / 1000 : 0, kind, text });
+  if (live.events.length > 200) live.events.shift();
+}
+function banner(text, err) { $("liveBanner").innerHTML = text ? `<div class="banner ${err ? "err" : ""}">${esc(text)}</div>` : ""; }
+
+function liveEmit(topic, data) {
+  if (!live.room) return;
+  live.room.emit(topic, data).catch(e => {
+    if (e && e.code === "not_permitted") {
+      live.canSend = false;
+      banner("You can watch, but your device isn't allowed to send. Ask the page owner to give you Contributor (or Editor) access.", true);
+    }
+  });
+}
+
+// ---------- validation of shared state (everything from other devices is untrusted) ----------
+function validShow(d) {
+  if (!d || typeof d !== "object" || typeof d.run !== "string" || !/^[a-z0-9]{8,24}$/.test(d.run)) return false;
+  if (!Array.isArray(d.members) || d.members.length < 2 || d.members.length > 9) return false;
+  if (!d.members.every(m => m && isId(m.id) && typeof m.name === "string" && m.name.length <= 24)) return false;
+  if (typeof d.loss !== "number" || d.loss < 0 || d.loss > 0.7) return false;
+  if (!d.sides || typeof d.sides !== "object" || !Object.entries(d.sides).every(([k, v]) => isId(k) && (v === 0 || v === 1))) return false;
+  return true;
+}
+function validSummary(s) {
+  if (!s || typeof s !== "object" || !isId(s.i) || !(s.a === 0 || s.a === 1) || !["l", "c", "f"].includes(s.s)) return false;
+  if (!isInt(s.t, 0, 1e7) || !isInt(s.c, 0, 1e6) || !isInt(s.o, 0, 1e6) || !Array.isArray(s.l) || s.l.length > 24) return false;
+  if (!s.l.every(e => Array.isArray(e) && isInt(e[0], 0, 1e7) && isInt(e[1], -1, PRESETS.length - 1))) return false;
+  if (!s.kv || typeof s.kv !== "object" || !Object.entries(s.kv).every(([k, v]) => KEYS[k] && typeof v === "string" && v.length <= 40)) return false;
+  return s.r === null || s.r === undefined || isInt(s.r, 0, 60000);
+}
+
+// ---------- joining ----------
+async function liveJoin() {
+  const code = $("liveCode").value.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+  const name = cleanName($("liveName").value);
+  if (code.length < 3) { $("liveJoinStatus").textContent = "Show code needs at least 3 letters or numbers."; return; }
+  if (!name) { $("liveJoinStatus").textContent = "Type your name so friends know who you are."; return; }
+  if (!live.api) { $("liveJoinStatus").textContent = "Live mode isn't available here. Open this page on claude.ai while signed in (it uses Claude's live rooms)."; return; }
+  $("liveJoinBtn").disabled = true;
+  $("liveJoinStatus").textContent = "Joining…";
+  try {
+    live.room = await live.api.join("show-" + code);
+  } catch (e) {
+    $("liveJoinBtn").disabled = false;
+    $("liveJoinStatus").textContent = e && e.code === "not_permitted" ? "Your account can't use live rooms on this page." : "Couldn't join right now. Try again in a moment.";
+    return;
+  }
+  live.code = code; live.name = name;
+  const r = live.room;
+  live.unsubs.push(r.on("raft", onRaftMsg));
+  live.unsubs.push(r.on("show", onShowMsg));
+  live.unsubs.push(r.on("ctrl", onCtrlMsg));
+  live.unsubs.push(r.onPeers(ch => { renderLobby(); if (live.isHost && ch.joined.length) broadcastShow(); }));
+  r.presence({ nodeId: live.myId, name });
+  $("joinCard").hidden = true; $("lobbyCard").hidden = false;
+  $("lobbyCode").textContent = code;
+  renderLobby();
+}
+
+async function liveLeave() {
+  stopRun();
+  live.unsubs.forEach(u => { try { u(); } catch (e) {} });
+  live.unsubs = [];
+  if (live.room) { try { await live.room.leave(); } catch (e) {} }
+  live.room = null; live.run = null;
+  $("joinCard").hidden = false; $("lobbyCard").hidden = true; $("meCard").hidden = true; $("hostCard").hidden = true;
+  $("liveJoinBtn").disabled = false; $("liveJoinStatus").textContent = "You left the show.";
+  showStage(false); banner("");
+}
+
+function renderLobby() {
+  if (!live.room) return;
+  const ps = live.room.peers();
+  const inRun = id => live.members.includes(id);
+  $("peerList").innerHTML = ps.map(p => {
+    const nm = cleanName(p.presence && p.presence.name) || "Someone";
+    const id = p.presence && p.presence.nodeId;
+    const tag = p.sameTab ? `<span class="you">you</span>` : (live.run && isId(id) && !inRun(id) ? `<span class="hint">watching</span>` : "");
+    return `<li><span>${esc(nm)}${p.guest ? " <span class='hint'>(guest)</span>" : ""}</span>${tag}</li>`;
+  }).join("") || `<li class="hint">Just you so far</li>`;
+  $("liveStartBtn").textContent = live.run ? "🔁 Restart the show" : "🎤 Start the show";
+}
+
+// ---------- starting a show ----------
+function liveStart() {
+  if (!live.room) return;
+  const seen = new Set(), members = [];
+  for (const p of live.room.peers()) {
+    const id = p.presence && p.presence.nodeId;
+    if (isId(id) && !seen.has(id)) { seen.add(id); members.push({ id, name: cleanName(p.presence.name) || "Friend" }); }
+  }
+  if (!seen.has(live.myId)) members.unshift({ id: live.myId, name: live.name });
+  const taken = new Set(members.map(m => m.name.toLowerCase()));
+  const nb = Math.min(parseInt($("botCount").value, 10) || 0, 9 - members.length);
+  live.bots = [];
+  for (const f of FRIENDS) {
+    if (live.bots.length >= nb) break;
+    if (taken.has(f.toLowerCase())) continue;
+    live.bots.push({ id: newId(), name: f + " 🤖" });
+  }
+  const all = members.concat(live.bots);
+  if (all.length < 2) { banner("You need at least 2 friends (add some bots).", true); return; }
+  banner(all.length < 3 ? "Only 2 friends: if either phone dies, nobody can be captain. 3 or more works better." : "");
+  const d = { run: Date.now().toString(36) + newId(), members: all, loss: live.cfg.loss, sides: {} };
+  adoptRun(d, null, true);
+  broadcastShow();
+  clearInterval(live.showTimer);
+  live.showTimer = setInterval(broadcastShow, 1500);
+}
+
+function broadcastShow() {
+  if (!live.isHost || !live.run) return;
+  liveEmit("show", { run: live.run, members: live.members.map(id => ({ id, name: live.names[id] })), loss: live.cfg.loss, sides: live.sides });
+}
+
+function stopRun() {
+  clearInterval(live.showTimer); live.showTimer = null;
+  live.nodes = {}; live.isHost = false;
+}
+
+function adoptRun(d, hostPeer, isHost) {
+  stopRun();
+  live.run = d.run; live.hostPeer = hostPeer; live.isHost = isHost; live.runStart = liveNow();
+  live.members = d.members.map(m => m.id);
+  live.names = {};
+  d.members.forEach(m => { live.names[m.id] = cleanName(m.name) || "Friend"; });
+  live.cfg.loss = d.loss; live.sides = { ...d.sides };
+  live.summaries = {}; live.prevSumm = {}; live.bubbles = []; live.poofs = []; live.events = [];
+  live.regroups = []; live.leaderless = { since: liveNow(), first: true }; live.captain = null;
+  if (live.members.includes(live.myId)) live.nodes[live.myId] = new LiveNode(live.myId, live.members, liveIO(live.myId));
+  if (isHost) for (const b of live.bots) live.nodes[b.id] = new LiveNode(b.id, live.members, liveIO(b.id));
+  $("liveLoss").value = live.cfg.loss; $("liveLossOut").textContent = Math.round(live.cfg.loss * 100) + "%";
+  $("meCard").hidden = !live.nodes[live.myId];
+  $("hostCard").hidden = !isHost;
+  $("hostHint").textContent = isHost ? "You started this show, so you control the network. Bots run on your device: keep this tab open." : "";
+  showStage(true);
+  liveLog("info", `Show started with ${live.members.length} friends: ${live.members.map(liveName).join(", ")}. Plans lock in once ${Math.floor(live.members.length / 2) + 1} have them.`);
+  renderLobby();
+}
+
+function showStage(on) {
+  $("liveIntro").hidden = on; $("liveViz").hidden = !on; $("liveLegend").hidden = !on;
+  if (!on) { $("liveStats").innerHTML = ""; }
+}
+
+// ---------- incoming messages ----------
+function onShowMsg(msg) {
+  const d = msg.data;
+  if (msg.sameTab || !validShow(d)) return;
+  if (d.run !== live.run) {
+    if (live.run && d.run < live.run) return;     // an older show
+    adoptRun(d, msg.peer, false);
+    return;
+  }
+  if (msg.peer === live.hostPeer) {
+    const before = JSON.stringify(live.sides), cut = Object.keys(d.sides).filter(k => d.sides[k] && live.members.includes(k));
+    if (d.loss !== live.cfg.loss) liveLog("warn", `📶 Signal changed: ${Math.round(d.loss * 100)}% of texts now fail`);
+    live.cfg.loss = d.loss; live.sides = { ...d.sides };
+    if (JSON.stringify(live.sides) !== before) liveLog("part", cut.length ? `🌊 Crowd surge! ${cut.map(liveName).join(" & ")} cut off from the rest` : "✨ Crowd clears. Everyone has signal again");
+  }
+}
+
+function onRaftMsg(msg) {
+  const m = msg.data;
+  if (!live.run || !validLiveMsg(m, PRESETS.length) || !live.members.includes(m.f)) return;
+  addBubbles(m);
+  for (const node of Object.values(live.nodes)) node.receive(m);
+}
+
+function onCtrlMsg(msg) {
+  const d = msg.data;
+  if (!d || typeof d !== "object" || !live.run || d.run !== live.run) return;
+  if ((d.a === "kill" || d.a === "revive") && isId(d.id) && live.nodes[d.id]) d.a === "kill" ? live.nodes[d.id].kill() : live.nodes[d.id].revive();
+  else if (d.a === "reviveAll") Object.values(live.nodes).forEach(n => n.revive());
+  else if (d.a === "write" && isInt(d.c, 0, PRESETS.length - 1)) {
+    let done = false;
+    for (const n of Object.values(live.nodes)) if (n.clientWrite(d.c)) done = true;
+    if (done) liveLog("client", `${liveName(Object.values(live.nodes).find(n => n.state === "leader").id)} texts the group: ${prettyCmd(PRESETS[d.c])}`);
+  }
+}
+
+function addBubbles(m) {
+  const t0 = liveNow();
+  const targets = m.to !== "*" ? [m.to] : m.t === "AE" ? Object.keys(m.p.per) : live.members.filter(x => x !== m.f);
+  for (const to of targets) {
+    if (!live.members.includes(to)) continue;
+    live.bubbles.push({ from: m.f, to, t: m.t, start: t0, big: m.t === "AE" && m.p.per[to] && m.p.per[to].e.length > 0, granted: m.t === "VR" ? m.p.g : true });
+  }
+  if (live.bubbles.length > 300) live.bubbles.splice(0, live.bubbles.length - 300);
+}
+
+// ---------- the clock: tick local nodes, publish status, watch the captain ----------
+setInterval(() => {
+  if (!live.run) return;
+  for (const n of Object.values(live.nodes)) n.tick();
+  const now = liveNow();
+  if (live.room && now - live.lastPresence > 250) {
+    live.lastPresence = now;
+    live.room.presence({ nodeId: live.myId, name: live.name, run: live.run, nodes: Object.values(live.nodes).map(n => n.summary()) }).catch(() => {});
+  }
+  mergeSummaries();
+  watchCaptain();
+}, 50);
+
+function mergeSummaries() {
+  if (live.room) {
+    for (const p of live.room.peers()) {
+      const pr = p.presence;
+      if (!pr || pr.run !== live.run || !Array.isArray(pr.nodes) || p.sameTab) continue;
+      for (const s of pr.nodes.slice(0, 6)) if (validSummary(s) && live.members.includes(s.i)) live.summaries[s.i] = s;
+    }
+  }
+  for (const n of Object.values(live.nodes)) live.summaries[n.id] = n.summary();
+  // story events from changes, so every device tells the same story
+  for (const id of live.members) {
+    const cur = live.summaries[id], prev = live.prevSumm[id];
+    if (cur && prev && cur !== prev) {
+      if (prev.a && !cur.a) liveLog("crash", `🔋 ${liveName(id)}'s phone died${prev.s === "l" ? " (they were the captain!)" : ""}`);
+      if (!prev.a && cur.a) liveLog("restart", `🔌 ${liveName(id)} found a charger and is catching up`);
+      if (cur.a && cur.s === "l" && prev.s !== "l") liveLog("leader", `${liveName(id)} gets a majority of 👍 → new captain 📍 (round ${cur.t})`);
+      if (cur.s === "l" && prev.s === "l" && cur.c > prev.c) {
+        for (let k = prev.c + 1; k <= cur.c; k++) {
+          const e = cur.l[k - 1 - cur.o];
+          if (e && e[1] >= 0) liveLog("commit", `Locked in ✓ ${prettyCmd(PRESETS[e[1]])}`);
+        }
+      }
+    }
+    if (cur) live.prevSumm[id] = cur;
+  }
+}
+
+function currentCaptain() {
+  let best = null;
+  for (const id of live.members) {
+    const s = live.summaries[id];
+    if (!s || !s.a || s.s !== "l") continue;
+    const side = live.sides[id] ? 1 : 0;
+    let reach = 0, newer = false;
+    for (const o of live.members) {
+      const so = live.summaries[o];
+      if (so && so.a && (live.sides[o] ? 1 : 0) === side) { reach++; if (so.t > s.t) newer = true; }
+    }
+    if (reach >= Math.floor(live.members.length / 2) + 1 && !newer && (!best || s.t > best.t)) best = s;
+  }
+  return best;
+}
+
+function watchCaptain() {
+  const cap = currentCaptain(), now = liveNow();
+  const capId = cap ? cap.i : null;
+  if (capId && live.leaderless) {
+    live.regroups.push({ ms: now - live.leaderless.since, first: live.leaderless.first, captain: liveName(capId), loss: live.cfg.loss, n: live.members.length, at: (now - live.runStart) / 1000 });
+    live.leaderless = null;
+  } else if (!capId && !live.leaderless) {
+    live.leaderless = { since: now, first: false };
+  }
+  live.captain = capId;
+}
+
+// ---------- drawing ----------
+function livePos(i) {
+  const a = -Math.PI / 2 + (i * 2 * Math.PI) / live.members.length;
+  return [CX + R * Math.cos(a), CY + R * Math.sin(a)];
+}
+function renderLive() {
+  if (!live.run) return;
+  const now = liveNow();
+  const idx = {}; live.members.forEach((id, i) => { idx[id] = i; });
+  let s = mode === "concert" ? backdrop() : (() => { const m = mode; mode = "concert"; const b = backdrop(); mode = m; return b; })();
+  for (let i = 0; i < live.members.length; i++) for (let j = i + 1; j < live.members.length; j++) {
+    const [x1, y1] = livePos(i), [x2, y2] = livePos(j);
+    const cut = (live.sides[live.members[i]] ? 1 : 0) !== (live.sides[live.members[j]] ? 1 : 0);
+    s += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${cut ? "var(--danger)" : "var(--surface-3)"}" ${cut ? 'stroke-dasharray="4 6" opacity="0.55"' : ""}/>`;
+  }
+  live.bubbles = live.bubbles.filter(b => now - b.start < 420);
+  for (const b of live.bubbles) {
+    if (!(b.from in idx) || !(b.to in idx)) continue;
+    const f = (now - b.start) / 420;
+    const [x1, y1] = livePos(idx[b.from]), [x2, y2] = livePos(idx[b.to]);
+    const x = x1 + (x2 - x1) * f, y = y1 + (y2 - y1) * f;
+    const type = { RV: "RequestVote", VR: "VoteReply", AE: "AppendEntries", AR: "AppendReply" }[b.t];
+    let r = b.t === "AE" ? (b.big ? 8 : 5) : 6;
+    if (b.t === "VR" && !b.granted) r = 4;
+    const w = r * 2.4, h = r * 1.7;
+    s += `<rect x="${(x - w / 2).toFixed(1)}" y="${(y - h / 2).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${msgColor[type]}" stroke="var(--surface-1)" stroke-width="1.5"/>`;
+  }
+  live.poofs = live.poofs.filter(p => now - p.t < 600);
+  for (const p of live.poofs) {
+    if (!(p.from in idx) || !(p.to in idx)) continue;
+    const [x1, y1] = livePos(idx[p.from]), [x2, y2] = livePos(idx[p.to]);
+    const x = x1 + (x2 - x1) * 0.8, y = y1 + (y2 - y1) * 0.8, o = 1 - (now - p.t) / 600;
+    s += `<g opacity="${o.toFixed(2)}" stroke="var(--danger)" stroke-width="2.5" stroke-linecap="round"><line x1="${x - 6}" y1="${y - 6}" x2="${x + 6}" y2="${y + 6}"/><line x1="${x - 6}" y1="${y + 6}" x2="${x + 6}" y2="${y - 6}"/></g>`;
+  }
+  live.members.forEach((id, i) => {
+    const [x, y] = livePos(i);
+    const sm = live.summaries[id], local = live.nodes[id];
+    const fill = !sm ? "var(--surface-3)" : !sm.a ? "var(--dead)" : sm.s === "l" ? "var(--leader)" : sm.s === "c" ? "var(--candidate)" : "var(--follower)";
+    const sideB = !!live.sides[id];
+    if (sideB) s += `<circle cx="${x}" cy="${y}" r="${NR + 16}" fill="var(--side-b)" opacity="0.22"/>`;
+    if (id === live.myId) s += `<circle cx="${x}" cy="${y}" r="${NR + 12}" fill="none" stroke="var(--append-reply)" stroke-width="2"/>`;
+    if (local && local.alive && local.state !== "leader") {
+      const total = local.deadline - local.timerSet, left = Math.max(0, local.deadline - now);
+      s += `<circle cx="${x}" cy="${y}" r="${NR + 6}" fill="none" stroke="var(--surface-3)" stroke-width="4"/>`;
+      s += `<path d="${arcPath(x, y, NR + 6, total > 0 ? left / total : 0)}" fill="none" stroke="${local.state === "candidate" ? "var(--candidate)" : "var(--text-muted)"}" stroke-width="4" stroke-linecap="round"/>`;
+    }
+    s += `<circle cx="${x}" cy="${y}" r="${NR}" fill="${fill}" stroke="${sideB ? "var(--side-b)" : "var(--surface-1)"}" stroke-width="${sideB ? 3 : 2}" ${sm && !sm.a ? 'stroke-dasharray="5 4"' : ""}/>`;
+    const status = !sm ? "connecting…" : !sm.a ? "🔋 dead" : sm.s === "l" ? "📍 captain" : sm.s === "c" ? "📣 asking…" : "following";
+    s += `<text x="${x}" y="${y - 3}" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">${esc(liveName(id))}</text>`;
+    s += `<text x="${x}" y="${y + 15}" text-anchor="middle" font-size="11.5" fill="rgba(255,255,255,0.88)">${status}</text>`;
+    if (id === live.myId) s += `<text x="${x}" y="${y + NR + 30}" text-anchor="middle" font-size="12" font-weight="700" fill="var(--append-reply)">YOU</text>`;
+  });
+  const cap = live.captain;
+  s += `<rect x="${CX - 70}" y="${CY - 26}" width="140" height="54" rx="10" fill="var(--bg)" opacity="0.75"/>`;
+  s += `<text x="${CX}" y="${CY - 6}" text-anchor="middle" font-size="12" fill="var(--text-muted)">${cap ? "captain" : ""}</text>`;
+  s += `<text x="${CX}" y="${CY + 16}" text-anchor="middle" font-size="19" font-weight="700" fill="${cap ? "var(--leader)" : "var(--danger)"}">${cap ? esc(liveName(cap)) : "NO CAPTAIN"}</text>`;
+  $("liveViz").innerHTML = s;
+}
+
+const median = a => { if (!a.length) return NaN; const s = a.slice().sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+function renderLivePanels() {
+  if (!live.run) return;
+  const now = liveNow();
+  const capS = live.captain ? live.summaries[live.captain] : null;
+  const maxT = Math.max(0, ...live.members.map(id => (live.summaries[id] ? live.summaries[id].t : 0)));
+  const rg = live.regroups.filter(r => !r.first).map(r => r.ms);
+  $("liveStats").innerHTML =
+    stat("Show time", ((now - live.runStart) / 1000).toFixed(0) + " s") +
+    stat("Captain", live.captain ? esc(liveName(live.captain)) : "none") +
+    stat("Round", maxT) +
+    stat("Real round-trip", capS && capS.r != null ? capS.r + " ms" : "—") +
+    stat("Texts failing", Math.round(live.cfg.loss * 100) + "%") +
+    stat("Regroups", rg.length);
+  $("liveLegend").innerHTML = T.concert.legend.map(([kind, color, label]) => kind === "x" ? `<span style="color:var(--danger)">✕ ${label}</span>` : kind === "ring" ? `<span>Ring = your patience left</span>` : `<span><i class="${kind === "bub" ? "bub" : "dot"}" style="background:var(${color})"></i>${label}</span>`).join("");
+
+  // plan card + logs
+  const ref = capS || live.members.map(id => live.summaries[id]).filter(Boolean).sort((a, b) => b.c - a.c)[0];
+  const plan = ref ? ref.kv : {};
+  const items = Object.keys(KEYS).filter(k => plan[k]).map(k => `<span>${KEYS[k].icon} <b>${esc(plan[k])}</b></span>`).join("");
+  const same = live.members.filter(id => live.summaries[id] && live.summaries[id].a && JSON.stringify(live.summaries[id].kv) === JSON.stringify(plan)).map(liveName);
+  $("livePlan").innerHTML = `<div class="ttl">🎟️ The locked-in plan</div><div class="items">${items || "<span class='hint'>Nothing locked in yet. Text the group a plan update.</span>"}</div><div class="who">${items ? "Up to date: " + esc(same.join(", ") || "nobody") : ""}</div>`;
+  let h = "";
+  for (const id of live.members) {
+    const sm = live.summaries[id];
+    h += `<div class="logrow"><div class="name ${sm && !sm.a ? "dead" : ""}">${esc(liveName(id))}${sm && sm.s === "l" && sm.a ? " 📍" : ""}</div><div class="entries">`;
+    if (sm) {
+      if (sm.o > 0) h += `<span class="hint">…${sm.o}</span>`;
+      sm.l.forEach((e, k) => {
+        const i = sm.o + k, committed = i < sm.c, col = termColor(e[0]);
+        const cmd = e[1] < 0 ? "no-op" : PRESETS[e[1]];
+        h += `<div class="entry ${committed ? "" : "uncommitted"}" style="background:${col};border-color:${col}" title="${esc(prettyCmd(cmd))} · round ${e[0]} · ${committed ? "locked in" : "NOT confirmed"}">${cmdIcon(cmd)}</div>`;
+      });
+      if (!sm.l.length) h += `<span class="hint">no texts</span>`;
+    } else h += `<span class="hint">waiting to hear from them…</span>`;
+    h += `</div><div class="kv">${sm ? Object.entries(sm.kv).map(([k, v]) => `${KEYS[k].icon} ${esc(v)}`).join(" · ") || "<span class='hint'>no plan yet</span>" : ""}</div></div>`;
+  }
+  $("liveLogs").innerHTML = h;
+  $("liveEvents").innerHTML = live.events.slice(-80).reverse().map(e => `<li class="${e.kind}" style="padding:3px 0;border-bottom:1px solid var(--surface-2);color:var(--text-secondary)"><span class="t" style="color:var(--text-muted);display:inline-block;width:52px;font-family:ui-monospace,Menlo,monospace;font-size:12px">${e.t.toFixed(1)}s</span>${esc(e.text)}</li>`).join("");
+
+  // me
+  const me = live.nodes[live.myId];
+  if (me) {
+    const role = !me.alive ? "PHONE DEAD" : me.state === "leader" ? "CAPTAIN 📍" : me.state === "candidate" ? "TRYING TO TAKE OVER" : "FOLLOWING";
+    $("meInfo").textContent = `${live.name}: ${role}\nround ${me.term} · ${me.log.length} texts, ${me.commitIndex} locked in\n` +
+      (me.state === "leader" ? `real round-trip to friends: ${me.rttMedian() ?? "—"} ms` : `captain: ${me.leaderId ? liveName(me.leaderId) : "unknown"} · patience left ${(Math.max(0, me.deadline - now) / 1000).toFixed(1)} s`);
+    $("meToggle").textContent = me.alive ? "🔋 Kill my phone" : "🔌 Charge my phone";
+    $("meToggle").className = me.alive ? "danger" : "primary";
+  }
+
+  // measurements
+  const firsts = live.regroups.filter(r => r.first).map(r => r.ms);
+  $("liveMeasure").innerHTML =
+    stat("First captain", firsts.length ? (firsts[0] / 1000).toFixed(1) + " s" : "—") +
+    stat("Regroups timed", rg.length) +
+    stat("Median regroup", rg.length ? (median(rg) / 1000).toFixed(1) + " s" : "—") +
+    stat("Fastest", rg.length ? (Math.min(...rg) / 1000).toFixed(1) + " s" : "—") +
+    stat("Slowest", rg.length ? (Math.max(...rg) / 1000).toFixed(1) + " s" : "—") +
+    stat("Round-trip", capS && capS.r != null ? capS.r + " ms" : "—");
+  $("regroupTable").innerHTML = live.regroups.length ? `<table><thead><tr><th>#</th><th>At</th><th>What</th><th>Took</th><th>New captain</th><th>Failed texts</th><th>Friends</th></tr></thead><tbody>${live.regroups.slice().reverse().map((r, k) => `<tr><td>${live.regroups.length - k}</td><td>${r.at.toFixed(0)} s</td><td>${r.first ? "First captain" : "Regroup"}</td><td>${(r.ms / 1000).toFixed(2)} s</td><td>${esc(r.captain)}</td><td>${Math.round(r.loss * 100)}%</td><td>${r.n}</td></tr>`).join("")}</tbody></table>` : "";
+}
+
+// ---------- controls ----------
+function ctrl(data) { if (live.run) liveEmit("ctrl", { run: live.run, ...data }); }
+$("liveJoinBtn").onclick = liveJoin;
+$("liveName").addEventListener("keydown", e => { if (e.key === "Enter") liveJoin(); });
+$("liveLeaveBtn").onclick = liveLeave;
+$("liveStartBtn").onclick = liveStart;
+$("meToggle").onclick = () => { const me = live.nodes[live.myId]; if (me) ctrl({ a: me.alive ? "kill" : "revive", id: live.myId }); };
+$("livePreset").innerHTML = PRESETS.map((p, i) => `<option value="${i}">${prettyCmd(p)}</option>`).join("");
+$("liveSend").onclick = () => { const i = parseInt($("livePreset").value, 10); ctrl({ a: "write", c: i }); $("livePreset").value = String((i + 1) % PRESETS.length); };
+$("liveLoss").addEventListener("input", e => { live.cfg.loss = parseFloat(e.target.value); $("liveLossOut").textContent = Math.round(live.cfg.loss * 100) + "%"; broadcastShow(); });
+$("liveLoss").addEventListener("change", () => liveLog("warn", `📶 Signal changed: ${Math.round(live.cfg.loss * 100)}% of texts now fail`));
+$("liveKillCaptain").onclick = () => { if (live.captain) ctrl({ a: "kill", id: live.captain }); };
+$("liveReviveAll").onclick = () => ctrl({ a: "reviveAll" });
+$("liveSurge").onclick = () => {
+  if (!live.captain) return;
+  const n = live.members.length, minority = n - (Math.floor(n / 2) + 1);
+  const start = live.members.indexOf(live.captain);
+  live.sides = {};
+  for (let k = 0; k < Math.max(1, minority); k++) live.sides[live.members[(start + k) % n]] = 1;
+  liveLog("part", `🌊 Crowd surge! ${Object.keys(live.sides).map(liveName).join(" & ")} cut off from the rest`);
+  broadcastShow();
+};
+$("liveHeal").onclick = () => { live.sides = {}; liveLog("part", "✨ Crowd clears. Everyone has signal again"); broadcastShow(); };
+$("liveCopy").onclick = async () => {
+  const rows = ["number,seconds_into_show,kind,regroup_seconds,new_captain,failed_texts_pct,friends"].concat(live.regroups.map((r, k) => [k + 1, r.at.toFixed(1), r.first ? "first" : "regroup", (r.ms / 1000).toFixed(3), JSON.stringify(r.captain), Math.round(r.loss * 100), r.n].join(",")));
+  try { await navigator.clipboard.writeText(rows.join("\n")); $("liveCopy").textContent = "Copied ✓"; setTimeout(() => { $("liveCopy").textContent = "Copy results"; }, 1500); }
+  catch (e) { $("regroupTable").insertAdjacentHTML("beforeend", `<pre style="white-space:pre-wrap;font-size:11px">${esc(rows.join("\n"))}</pre>`); }
+};
+
+// ---------- view switching ----------
+function setView(v) {
+  const isLive = v === "live";
+  $("soloView").hidden = isLive; $("liveView").hidden = !isLive;
+  $("viewSolo").classList.toggle("on", !isLive); $("viewLive").classList.toggle("on", isLive);
+  document.querySelector(".mode-toggle").style.visibility = isLive ? "hidden" : "visible";
+}
+$("viewSolo").onclick = () => setView("solo");
+$("viewLive").onclick = () => setView("live");
+$("liveCode").value = "ece1100";
+try { const nm = localStorage.getItem("concertName"); if (nm) $("liveName").value = nm; } catch (e) {}
+$("liveName").addEventListener("change", e => { try { localStorage.setItem("concertName", cleanName(e.target.value)); } catch (err) {} });
+
+// Light up live mode once the platform answers (null = this view can't connect).
+(async () => {
+  try { live.api = window.claude && typeof window.claude.use === "function" ? await window.claude.use("room") : null; } catch (e) { live.api = null; }
+  if (!live.api) $("liveJoinStatus").textContent = "Live mode needs this page open on claude.ai while signed in. The simulator tab works anywhere.";
+})();
 
 // ---------- start ----------
 resetCluster();
